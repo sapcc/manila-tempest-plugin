@@ -15,6 +15,7 @@
 
 import copy
 import inspect
+import os
 import re
 import traceback
 
@@ -25,6 +26,7 @@ from tempest.common import credentials_factory as common_creds
 
 from tempest import config
 from tempest.lib.common import dynamic_creds
+from tempest.lib.common import preprov_creds
 from tempest.lib.common.utils import data_utils
 from tempest.lib import exceptions
 from tempest import test
@@ -161,25 +163,42 @@ class BaseSharesTest(test.BaseTestCase):
             identity_uri = CONF.identity.uri
             identity_admin_endpoint_type = CONF.identity.v2_admin_endpoint_type
 
-        return dynamic_creds.DynamicCredentialProvider(
-            identity_version=identity_version,
-            name=name,
-            network_resources=network_resources,
-            credentials_domain=CONF.auth.default_credentials_domain_name,
-            admin_role=CONF.identity.admin_role,
-            admin_creds=common_creds.get_configured_admin_credentials(),
-            identity_admin_domain_scope=CONF.identity.admin_domain_scope,
-            identity_admin_role=CONF.identity.admin_role,
-            extra_roles=None,
-            neutron_available=CONF.service_available.neutron,
-            create_networks=(
-                CONF.share.create_networks_when_multitenancy_enabled),
-            project_network_cidr=CONF.network.project_network_cidr,
-            project_network_mask_bits=CONF.network.project_network_mask_bits,
-            public_network_id=CONF.network.public_network_id,
-            resource_prefix='tempest',
-            identity_admin_endpoint_type=identity_admin_endpoint_type,
-            identity_uri=identity_uri)
+        if CONF.auth.use_dynamic_credentials:
+            return dynamic_creds.DynamicCredentialProvider(
+                identity_version=identity_version,
+                name=name,
+                network_resources=network_resources,
+                credentials_domain=CONF.auth.default_credentials_domain_name,
+                admin_role=CONF.identity.admin_role,
+                admin_creds=common_creds.get_configured_admin_credentials(),
+                identity_admin_domain_scope=CONF.identity.admin_domain_scope,
+                identity_admin_role=CONF.identity.admin_role,
+                extra_roles=None,
+                neutron_available=CONF.service_available.neutron,
+                create_networks=(
+                    CONF.share.create_networks_when_multitenancy_enabled),
+                project_network_cidr=CONF.network.project_network_cidr,
+                project_network_mask_bits=CONF.network.project_network_mask_bits,
+                public_network_id=CONF.network.public_network_id,
+                resource_prefix='tempest',
+                identity_admin_endpoint_type=identity_admin_endpoint_type,
+                identity_uri=identity_uri)
+        else:
+            if CONF.auth.test_accounts_file:
+                accounts_lock_dir = os.path.join(lockutils.get_lock_path(CONF),
+                                         'test_accounts')
+                # Most params are not relevant for pre-created accounts
+                return preprov_creds.PreProvisionedCredentialProvider(
+                    name=name,
+                    identity_version=identity_version,
+                    accounts_lock_dir=accounts_lock_dir,
+                    test_accounts_file=CONF.auth.test_accounts_file,
+                    credentials_domain=CONF.auth.default_credentials_domain_name,
+                    admin_role=CONF.identity.admin_role,
+                    identity_uri=identity_uri)
+            else:
+                raise exceptions.InvalidConfiguration(
+                    'A valid credential provider is needed')
 
     @classmethod
     def get_client_with_isolated_creds(cls,
@@ -209,7 +228,7 @@ class BaseSharesTest(test.BaseTestCase):
         elif "alt" in type_of_creds:
             creds = ic.get_alt_creds().credentials
         else:
-            creds = ic.get_credentials(type_of_creds).credentials
+            creds = ic.get_primary_creds().credentials
         ic.type_of_creds = type_of_creds
 
         # create client with isolated creds
