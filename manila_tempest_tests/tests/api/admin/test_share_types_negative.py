@@ -54,6 +54,7 @@ class ShareTypesAdminNegativeTest(base.BaseSharesMixedTest):
     @ddt.data('2.0', '2.6', '2.40')
     def test_create_share_type_with_description_in_wrong_version(
             self, version):
+        raise cls.skipException("ccloud-pike")
         self.assertRaises(lib_exc.BadRequest,
                           self.create_share_type,
                           data_utils.rand_name("tempest_type_name"),
