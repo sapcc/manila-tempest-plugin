@@ -373,23 +373,35 @@ class BaseSharesTest(test.BaseTestCase):
             elif not CONF.share.create_networks_when_multitenancy_enabled:
                 share_network_id = None
 
-                # Try get suitable share-network
+                # ccloud BEGIN
                 share_networks = sc.list_share_networks_with_detail()
                 for sn in share_networks:
-                    if (sn["neutron_net_id"] is None and
-                            sn["neutron_subnet_id"] is None and
-                            sn["name"] and search_word in sn["name"]):
+                    if search_word in sn["name"]:
                         share_network_id = sn["id"]
                         break
 
-                # Create new share-network if one was not found
                 if share_network_id is None:
-                    sn_desc = "This share-network was created by tempest"
-                    sn = sc.create_share_network(name=sn_name,
-                                                 description=sn_desc)
-                    share_network_id = sn["id"]
+                    skip_msg = "ccloud no share net in %s" % sc.tenant_id
+                    raise cls.skipException(skip_msg)
+                else:
+                    return share_network_id
+                # ccloud END
             else:
                 net_id = subnet_id = share_network_id = None
+
+                # ccloud BEGIN
+                share_networks = sc.list_share_networks_with_detail()
+                for sn in share_networks:
+                    if search_word in sn["name"]:
+                        share_network_id = sn["id"]
+                        break
+
+                if share_network_id is None:
+                    skip_msg = "ccloud no share net in %s" % sc.tenant_id
+                    raise cls.skipException(skip_msg)
+                else:
+                    return share_network_id
+                # ccloud END
 
                 if not isolated_creds_client:
                     # Search for networks, created in previous runs
@@ -927,7 +939,7 @@ class BaseSharesTest(test.BaseTestCase):
                             params = {'share_group_id': share_group_id}
                             client.delete_share(res_id, params=params)
                         else:
-                            client.delete_share(res_id)
+                            client.force_delete(res_id)
                         client.wait_for_resource_deletion(share_id=res_id)
                     elif res["type"] is "snapshot":
                         client.delete_snapshot(res_id)
