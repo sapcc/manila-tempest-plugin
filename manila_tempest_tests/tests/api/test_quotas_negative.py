@@ -27,11 +27,11 @@ CONF = config.CONF
 class SharesQuotasNegativeTest(base.BaseSharesTest):
 
     @classmethod
-    def resource_setup(cls):
+    def skip_checks(cls):
+        super(SharesQuotasNegativeTest, cls).skip_checks()
         if not CONF.share.run_quota_tests:
             msg = "Quota tests are disabled."
             raise cls.skipException(msg)
-        super(SharesQuotasNegativeTest, cls).resource_setup()
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API)
     def test_get_quotas_with_empty_tenant_id(self):
