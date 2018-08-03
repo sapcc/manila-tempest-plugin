@@ -32,10 +32,14 @@ SHARE_GROUPS_MICROVERSION = "2.40"
 class SharesAdminQuotasTest(base.BaseSharesAdminTest):
 
     @classmethod
-    def resource_setup(cls):
+    def skip_checks(cls):
+        super(SharesAdminQuotasTest, cls).skip_checks()
         if not CONF.share.run_quota_tests:
             msg = "Quota tests are disabled."
             raise cls.skipException(msg)
+
+    @classmethod
+    def resource_setup(cls):
         super(SharesAdminQuotasTest, cls).resource_setup()
         cls.user_id = cls.shares_v2_client.user_id
         cls.tenant_id = cls.shares_v2_client.tenant_id
@@ -140,10 +144,14 @@ class SharesAdminQuotasUpdateTest(base.BaseSharesAdminTest):
     force_tenant_isolation = True
 
     @classmethod
-    def resource_setup(cls):
+    def skip_checks(cls):
+        super(SharesAdminQuotasUpdateTest, cls).skip_checks()
         if not CONF.share.run_quota_tests:
             msg = "Quota tests are disabled."
             raise cls.skipException(msg)
+
+    @classmethod
+    def resource_setup(cls):
         super(SharesAdminQuotasUpdateTest, cls).resource_setup()
         # create share type
         cls.share_type = cls._create_share_type()

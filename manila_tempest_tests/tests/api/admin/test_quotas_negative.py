@@ -33,10 +33,14 @@ class SharesAdminQuotasNegativeTest(base.BaseSharesAdminTest):
     force_tenant_isolation = True
 
     @classmethod
-    def resource_setup(cls):
+    def skip_checks(cls):
+        super(SharesAdminQuotasNegativeTest, cls).skip_checks()
         if not CONF.share.run_quota_tests:
             msg = "Quota tests are disabled."
             raise cls.skipException(msg)
+
+    @classmethod
+    def resource_setup(cls):
         super(SharesAdminQuotasNegativeTest, cls).resource_setup()
         cls.user_id = cls.shares_client.user_id
         cls.tenant_id = cls.shares_client.tenant_id
