@@ -945,7 +945,9 @@ class BaseSharesTest(test.BaseTestCase):
                         client.delete_snapshot(res_id)
                         client.wait_for_resource_deletion(snapshot_id=res_id)
                     elif (res["type"] is "share_network" and
-                            res_id != CONF.share.share_network_id):
+                            res_id != CONF.share.share_network_id and
+                            res_id != CONF.share.admin_share_network_id and
+                            res_id != CONF.share.alt_share_network_id):
                         client.delete_share_network(res_id)
                         client.wait_for_resource_deletion(sn_id=res_id)
                     elif res["type"] is "security_service":
@@ -1105,14 +1107,20 @@ class BaseSharesMixedTest(BaseSharesTest):
         cls.os_alt.networks_client = cls.os_alt.network.NetworksClient()
 
         if CONF.share.multitenancy_enabled:
-            admin_share_network_id = cls.provide_share_network(
-                cls.admin_shares_v2_client, cls.os_admin.networks_client)
+            if CONF.share.admin_share_network_id:
+                admin_share_network_id = CONF.share.admin_share_network_id
+            else:
+                admin_share_network_id = cls.provide_share_network(
+                    cls.admin_shares_v2_client, cls.os_admin.networks_client)
             cls.admin_shares_client.share_network_id = admin_share_network_id
             cls.admin_shares_v2_client.share_network_id = (
                 admin_share_network_id)
 
-            alt_share_network_id = cls.provide_share_network(
-                cls.alt_shares_v2_client, cls.os_alt.networks_client)
+            if CONF.share.alt_share_network_id:
+                alt_share_network_id = CONF.share.alt_share_network_id
+            else:
+                alt_share_network_id = cls.provide_share_network(
+                    cls.alt_shares_v2_client, cls.os_alt.networks_client)
             cls.alt_shares_client.share_network_id = alt_share_network_id
             cls.alt_shares_v2_client.share_network_id = alt_share_network_id
             resource = {
