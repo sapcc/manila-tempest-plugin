@@ -570,6 +570,10 @@ class SharesClient(rest_client.RestClient):
         return self._parse_resp(body)
 
     def delete_share_network(self, sn_id):
+        if (sn_id == CONF.share.share_network_id or
+                sn_id == CONF.share.admin_share_network_id or
+                sn_id == CONF.share.alt_share_network_id):
+                    sn_id = ''
         resp, body = self.delete("share-networks/%s" % sn_id)
         self.expected_success(202, resp.status)
         return body
