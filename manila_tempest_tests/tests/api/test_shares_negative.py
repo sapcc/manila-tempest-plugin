@@ -51,7 +51,8 @@ class SharesNegativeTest(base.BaseSharesTest):
         share = self.create_share()
 
         # create snapshot
-        self.create_snapshot_wait_for_active(share["id"])
+        self.create_snapshot_wait_for_active(share["id"],
+            cleanup_in_class=False)
 
         # try delete share
         self.assertRaises(lib_exc.Forbidden,
