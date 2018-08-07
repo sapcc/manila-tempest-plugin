@@ -390,7 +390,8 @@ class SharesActionsTest(base.BaseSharesTest):
             self.assertEqual(project_id, share["project_id"])
 
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
-    @base.skip_if_microversion_lt("2.42")
+    # ccloud pike
+    @base.skip_if_microversion_lt("2.44")
     def test_list_shares_with_detail_with_count(self):
         # list shares by name, at least one share is expected
         params = {"with_count": 'true'}
