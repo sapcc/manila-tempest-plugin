@@ -124,6 +124,8 @@ class ShareIpRulesForNFSNegativeTest(base.BaseSharesMixedTest):
                 rule_id=rule["id"], share_id=self.share["id"], version=version)
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
+    # ccloud pike
+    @base.skip_if_microversion_lt("2.44")
     @ddt.data("10.20.30.40", "fd8c:b029:bba6:ac54::1",
               "fd2c:b029:bba6:df54::1/128", "10.10.30.40/32")
     def test_create_duplicate_single_host_rules(self, access_to):
