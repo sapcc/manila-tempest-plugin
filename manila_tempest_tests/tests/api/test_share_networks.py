@@ -94,7 +94,7 @@ class ShareNetworkListMixin(object):
     @base.skip_if_microversion_lt("2.36")
     def test_list_share_networks_like_filter(self):
         valid_filter_opts = {
-            'name': 'sn_with_ldap_ss',
+            'name': 'tempest_sn_with_ldap_ss',
             'description': 'fake',
         }
 
@@ -117,7 +117,7 @@ class ShareNetworkListMixin(object):
             'segmentation_id': 1000,
             'cidr': '10.0.0.0/24',
             'ip_version': 4,
-            'name': 'sn_with_ldap_ss'
+            'name': 'tempest_sn_with_ldap_ss'
         }
 
         listed = self.shares_client.list_share_networks_with_detail(
@@ -142,7 +142,7 @@ class ShareNetworksTest(base.BaseSharesTest, ShareNetworkListMixin):
         cls.ss_ldap = cls.create_security_service(**ss_data)
 
         cls.data_sn_with_ldap_ss = {
-            'name': 'sn_with_ldap_ss',
+            'name': 'tempest_sn_with_ldap_ss',
             'neutron_net_id': '1111',
             'neutron_subnet_id': '2222',
             'created_at': '2002-02-02',
@@ -162,7 +162,7 @@ class ShareNetworksTest(base.BaseSharesTest, ShareNetworkListMixin):
             cls.ss_ldap["id"])
 
         cls.data_sn_with_kerberos_ss = {
-            'name': 'sn_with_kerberos_ss',
+            'name': 'tempest_sn_with_kerberos_ss',
             'created_at': '2003-03-03',
             'updated_at': None,
             'neutron_net_id': 'test net id',
