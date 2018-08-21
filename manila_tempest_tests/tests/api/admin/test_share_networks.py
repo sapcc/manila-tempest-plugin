@@ -30,7 +30,7 @@ class ShareNetworkAdminTest(
         cls.ss_ldap = cls.create_security_service(**ss_data)
 
         cls.data_sn_with_ldap_ss = {
-            'name': 'sn_with_ldap_ss',
+            'name': 'tempest_sn_with_ldap_ss',
             'neutron_net_id': '1111',
             'neutron_subnet_id': '2222',
             'created_at': '2002-02-02',
@@ -52,7 +52,7 @@ class ShareNetworkAdminTest(
         cls.isolated_client = cls.get_client_with_isolated_creds(
             type_of_creds='alt')
         cls.data_sn_with_kerberos_ss = {
-            'name': 'sn_with_kerberos_ss',
+            'name': 'tempest_sn_with_kerberos_ss',
             'created_at': '2003-03-03',
             'updated_at': None,
             'neutron_net_id': 'test net id',
