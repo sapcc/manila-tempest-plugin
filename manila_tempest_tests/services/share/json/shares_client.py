@@ -537,6 +537,12 @@ class SharesClient(rest_client.RestClient):
     def create_share_network(self, **kwargs):
         # kwargs: name, description
         # + for neutron: neutron_net_id, neutron_subnet_id
+        kwargs_name = kwargs.pop('name', None)
+        if kwargs_name is None:
+            name = data_utils.rand_name("tempest-share-net")
+        else:
+            name = kwargs_name
+        kwargs['name'] = name
         body = json.dumps({"share_network": kwargs})
         resp, body = self.post("share-networks", body)
         self.expected_success(200, resp.status)
