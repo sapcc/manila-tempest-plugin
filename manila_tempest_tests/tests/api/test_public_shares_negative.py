@@ -10,11 +10,15 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from tempest import config
 from tempest.lib import decorators
 from tempest.lib import exceptions as lib_exc
+import testtools
 from testtools import testcase as tc
 
 from manila_tempest_tests.tests.api import base
+
+CONF = config.CONF
 
 
 class PublicSharesNegativeTest(base.BaseSharesMixedTest):
@@ -27,16 +31,19 @@ class PublicSharesNegativeTest(base.BaseSharesMixedTest):
         share_type_id = share_type['id']
         # create a public share - manila's default RBAC only allows
         # administrator users operating at system scope to create public shares
-        cls.share = cls.create_share(
-            name='public_share',
-            description='public_share_desc',
-            share_type_id=share_type_id,
-            is_public=True,
-            metadata={'key': 'value'},
-            client=cls.admin_shares_v2_client
-        )
+        if CONF.share.run_public_tests:
+            cls.share = cls.create_share(
+                name='public_share',
+                description='public_share_desc',
+                share_type_id=share_type_id,
+                is_public=True,
+                metadata={'key': 'value'},
+                client=cls.admin_shares_v2_client
+            )
 
     @decorators.idempotent_id('255011c0-4ed9-4174-bb13-8bbd06a62529')
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
     def test_update_share_with_wrong_public_value(self):
         self.assertRaises(lib_exc.BadRequest,
@@ -45,6 +52,8 @@ class PublicSharesNegativeTest(base.BaseSharesMixedTest):
                           is_public="truebar")
 
     @decorators.idempotent_id('3443493b-f56a-4faa-9968-e7cbb0d2802f')
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
     def test_update_other_tenants_public_share(self):
         self.assertRaises(lib_exc.Forbidden,
@@ -53,6 +62,8 @@ class PublicSharesNegativeTest(base.BaseSharesMixedTest):
                           name="new_name")
 
     @decorators.idempotent_id('68d1f1bc-16e4-4086-8982-7e44ca6bdc4d')
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
     def test_delete_other_tenants_public_share(self):
         self.assertRaises(lib_exc.Forbidden,
@@ -60,6 +71,8 @@ class PublicSharesNegativeTest(base.BaseSharesMixedTest):
                           self.share['id'])
 
     @decorators.idempotent_id('1f9e5d84-0885-4a4b-9196-9031a1c01508')
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
     def test_set_metadata_of_other_tenants_public_share(self):
         self.assertRaises(lib_exc.Forbidden,
@@ -68,6 +81,8 @@ class PublicSharesNegativeTest(base.BaseSharesMixedTest):
                           {'key': 'value'})
 
     @decorators.idempotent_id('fed7a935-9699-43a1-854e-67b61ba6233e')
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
     def test_update_metadata_of_other_tenants_public_share(self):
         self.assertRaises(lib_exc.Forbidden,
@@ -76,6 +91,8 @@ class PublicSharesNegativeTest(base.BaseSharesMixedTest):
                           {'key': 'value'})
 
     @decorators.idempotent_id('bd62adeb-73c2-4b04-8812-80b479cd5c3b')
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
     def test_delete_metadata_of_other_tenants_public_share(self):
         self.assertRaises(lib_exc.Forbidden,

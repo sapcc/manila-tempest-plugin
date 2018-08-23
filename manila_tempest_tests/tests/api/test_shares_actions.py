@@ -778,20 +778,23 @@ class SharesRenameTest(base.BaseSharesMixedTest):
         self.assertEqual(self.share_name, share["name"])
         self.assertEqual(self.share_desc, share["description"])
         self.assertFalse(share["is_public"])
+        is_public = CONF.share.run_public_tests
 
         # update share
         new_name = data_utils.rand_name("tempest-new-name")
         new_desc = data_utils.rand_name("tempest-new-description")
         updated = self.shares_client.update_share(
-            share["id"], name=new_name, desc=new_desc)['share']
+            share["id"], name=new_name, desc=new_desc,
+            is_public=is_public)['share']
         self.assertEqual(new_name, updated["name"])
         self.assertEqual(new_desc, updated["description"])
+        self.assertEqual(updated["is_public"], is_public)
 
         # get share
         share = self.shares_client.get_share(self.share['id'])['share']
         self.assertEqual(new_name, share["name"])
         self.assertEqual(new_desc, share["description"])
-        self.assertFalse(share["is_public"])
+        self.assertEqual(share["is_public"], is_public)
 
     @decorators.idempotent_id('20f299f6-2441-4629-b44e-d791d57f413c')
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
