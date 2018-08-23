@@ -187,6 +187,11 @@ ShareGroup = [
                 help="Defines whether to run tests that use share snapshots "
                      "or not. Disable this feature if used driver doesn't "
                      "support it."),
+    cfg.BoolOpt("run_public_tests",
+                default=True,
+                help="Defines whether to run tests that use public shares "
+                     "or not. Disable this feature if used policy doesn't "
+                     "allow it."),
     cfg.BoolOpt("run_revert_to_snapshot_tests",
                 default=False,
                 help="Defines whether to run tests that revert shares "

@@ -403,6 +403,8 @@ class SharesActionsTest(base.BaseSharesMixedTest):
         self.assertGreater(shares["count"], 0)
 
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     def test_list_shares_public_with_detail(self):
         public_share = self.create_share(
             name='public_share',
@@ -699,21 +701,23 @@ class SharesRenameTest(base.BaseSharesMixedTest):
         self.assertEqual(self.share_name, share["name"])
         self.assertEqual(self.share_desc, share["description"])
         self.assertFalse(share["is_public"])
+        is_public = CONF.share.run_public_tests
 
         # update share
         new_name = data_utils.rand_name("tempest-new-name")
         new_desc = data_utils.rand_name("tempest-new-description")
         updated = self.shares_client.update_share(
-            share["id"], new_name, new_desc, is_public=True)
+            share["id"], new_name, new_desc, is_public=is_public)
         self.assertEqual(new_name, updated["name"])
         self.assertEqual(new_desc, updated["description"])
-        self.assertTrue(updated["is_public"])
+
+        self.assertEqual(updated["is_public"], is_public)
 
         # get share
         share = self.shares_client.get_share(self.share['id'])
         self.assertEqual(new_name, share["name"])
         self.assertEqual(new_desc, share["description"])
-        self.assertTrue(share["is_public"])
+        self.assertEqual(share["is_public"], is_public)
 
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
     @testtools.skipUnless(CONF.share.run_snapshot_tests,

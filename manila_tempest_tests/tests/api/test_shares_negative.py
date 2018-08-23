@@ -33,16 +33,19 @@ class SharesNegativeTest(base.BaseSharesMixedTest):
         cls.share_type = cls._create_share_type()
         cls.share_type_id = cls.share_type['id']
 
-        # create share
-        cls.share = cls.create_share(
-            name='public_share',
-            description='public_share_desc',
-            share_type_id=cls.share_type_id,
-            is_public=True,
-            metadata={'key': 'value'}
-        )
+        if CONF.share.run_public_tests:
+            # create share
+            cls.share = cls.create_share(
+                name='public_share',
+                description='public_share_desc',
+                share_type_id=cls.share_type_id,
+                is_public=True,
+                metadata={'key': 'value'}
+            )
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     def test_update_share_with_wrong_public_value(self):
         self.assertRaises(lib_exc.BadRequest,
                           self.shares_client.update_share, self.share["id"],
@@ -150,6 +153,8 @@ class SharesNegativeTest(base.BaseSharesMixedTest):
         )
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     def test_update_other_tenants_public_share(self):
         isolated_client = self.get_client_with_isolated_creds(
             type_of_creds='alt')
@@ -157,6 +162,8 @@ class SharesNegativeTest(base.BaseSharesMixedTest):
                           self.share["id"], name="new_name")
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     def test_delete_other_tenants_public_share(self):
         isolated_client = self.get_client_with_isolated_creds(
             type_of_creds='alt')
@@ -165,6 +172,8 @@ class SharesNegativeTest(base.BaseSharesMixedTest):
                           self.share['id'])
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     def test_set_metadata_of_other_tenants_public_share(self):
         isolated_client = self.get_client_with_isolated_creds(
             type_of_creds='alt')
@@ -174,6 +183,8 @@ class SharesNegativeTest(base.BaseSharesMixedTest):
                           {'key': 'value'})
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     def test_update_metadata_of_other_tenants_public_share(self):
         isolated_client = self.get_client_with_isolated_creds(
             type_of_creds='alt')
@@ -183,6 +194,8 @@ class SharesNegativeTest(base.BaseSharesMixedTest):
                           {'key': 'value'})
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skipUnless(CONF.share.run_public_tests,
+                          "Public tests are disabled.")
     def test_delete_metadata_of_other_tenants_public_share(self):
         isolated_client = self.get_client_with_isolated_creds(
             type_of_creds='alt')
