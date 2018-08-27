@@ -208,6 +208,7 @@ class SharesAPIOnlyNegativeTest(base.BaseSharesTest):
                           'fake-type')
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API)
+    @testtools.skip("ccloud policy allows this")
     def test_list_by_user_with_host_filter(self):
         self.assertRaises(lib_exc.Forbidden,
                           self.shares_v2_client.list_shares,
