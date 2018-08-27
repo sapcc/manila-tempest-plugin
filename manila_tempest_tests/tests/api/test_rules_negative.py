@@ -157,7 +157,7 @@ class ShareIpRulesForNFSNegativeTest(base.BaseSharesMixedTest):
             self.protocol)
         extra_specs = self.add_extra_specs_to_dict(
             {"share_backend_name": 'invalid_backend'})
-        share_type = self.create_share_type('invalid_backend',
+        share_type = self.create_share_type('tempest_invalid_backend',
                                             extra_specs=extra_specs,
                                             client=self.admin_client,
                                             cleanup_in_class=False)
