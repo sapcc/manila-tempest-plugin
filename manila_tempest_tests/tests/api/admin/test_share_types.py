@@ -65,13 +65,13 @@ class ShareTypesAdminTest(base.BaseSharesAdminTest):
             self.assertNotIn('description', share_type)
 
     @tc.attr(base.TAG_POSITIVE, base.TAG_API)
-    @ddt.data('2.0', '2.6', '2.7', '2.40', '2.41')
+    @ddt.data('2.0', '2.6', '2.7', '2.40', '2.44')
     def test_share_type_create_get(self, version):
         self.skip_if_microversion_not_supported(version)
 
         name = data_utils.rand_name("tempest-manila")
         description = None
-        if utils.is_microversion_ge(version, "2.41"):
+        if utils.is_microversion_ge(version, "2.44"):
             description = "Description for share type"
         extra_specs = self.add_extra_specs_to_dict({"key": "value", })
 
@@ -97,13 +97,13 @@ class ShareTypesAdminTest(base.BaseSharesAdminTest):
         self.assertDictMatch(get["volume_type"], get["share_type"])
 
     @tc.attr(base.TAG_POSITIVE, base.TAG_API)
-    @ddt.data('2.0', '2.6', '2.7', '2.40', '2.41')
+    @ddt.data('2.0', '2.6', '2.7', '2.40', '2.44')
     def test_share_type_create_list(self, version):
         self.skip_if_microversion_not_supported(version)
 
         name = data_utils.rand_name("tempest-manila")
         description = None
-        if utils.is_microversion_ge(version, "2.41"):
+        if utils.is_microversion_ge(version, "2.44"):
             description = "Description for share type"
         extra_specs = self.add_extra_specs_to_dict()
 

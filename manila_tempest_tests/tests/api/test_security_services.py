@@ -43,10 +43,10 @@ class SecurityServiceListMixin(object):
         [self.assertIn(key, s_s.keys()) for s_s in listed for key in keys]
 
     @tc.attr(base.TAG_POSITIVE, base.TAG_API)
-    @ddt.data(*set(['1.0', '2.42', '2.44', LATEST_MICROVERSION]))
+    @ddt.data(*set(['1.0', '2.42', '2.43', LATEST_MICROVERSION]))
     def test_list_security_services_with_detail(self, version):
         self.skip_if_microversion_not_supported(version)
-        with_ou = True if utils.is_microversion_ge(version, '2.44') else False
+        with_ou = True if utils.is_microversion_ge(version, '2.43') else False
         if utils.is_microversion_ge(version, '2.0'):
             listed = self.shares_v2_client.list_security_services(
                 detailed=True, version=version)
@@ -126,7 +126,7 @@ class SecurityServicesTest(base.BaseSharesTest,
             'user': 'fake_user',
             'password': 'pass',
         }
-        if utils.is_microversion_ge(CONF.share.max_api_microversion, '2.44'):
+        if utils.is_microversion_ge(CONF.share.max_api_microversion, '2.43'):
             ss_ldap_data['ou'] = 'OU=fake_unit_1'
         ss_kerberos_data = {
             'name': 'ss_kerberos',
@@ -136,7 +136,7 @@ class SecurityServicesTest(base.BaseSharesTest,
             'user': 'test_user',
             'password': 'word',
         }
-        if utils.is_microversion_ge(CONF.share.max_api_microversion, '2.44'):
+        if utils.is_microversion_ge(CONF.share.max_api_microversion, '2.43'):
             ss_kerberos_data['ou'] = 'OU=fake_unit_2'
         self.ss_ldap = self.create_security_service('ldap', **ss_ldap_data)
         self.ss_kerberos = self.create_security_service(
@@ -153,10 +153,10 @@ class SecurityServicesTest(base.BaseSharesTest,
             self.shares_client.delete_security_service(ss["id"])
 
     @tc.attr(base.TAG_POSITIVE, base.TAG_API)
-    @ddt.data(*set(['1.0', '2.43', '2.44', LATEST_MICROVERSION]))
+    @ddt.data(*set(['1.0', '2.43', '2.43', LATEST_MICROVERSION]))
     def test_get_security_service(self, version):
         self.skip_if_microversion_not_supported(version)
-        with_ou = True if utils.is_microversion_ge(version, '2.44') else False
+        with_ou = True if utils.is_microversion_ge(version, '2.43') else False
         data = self.generate_security_service_data(set_ou=with_ou)
 
         if utils.is_microversion_ge(version, '2.0'):
@@ -187,7 +187,7 @@ class SecurityServicesTest(base.BaseSharesTest,
         self.assertDictContainsSubset(upd_data, updated)
         self.assertDictContainsSubset(upd_data, get)
 
-        if utils.is_microversion_ge(CONF.share.max_api_microversion, '2.44'):
+        if utils.is_microversion_ge(CONF.share.max_api_microversion, '2.43'):
             # update again with ou
             upd_data_ou = self.generate_security_service_data(set_ou=True)
             updated_ou = self.shares_v2_client.update_security_service(
