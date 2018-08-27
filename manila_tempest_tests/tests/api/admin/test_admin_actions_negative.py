@@ -64,6 +64,7 @@ class AdminActionsNegativeTest(base.BaseSharesMixedTest):
                           self.sn["id"], s_type="snapshots", status="fake")
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skip("ccloud policy allows this")
     def test_try_reset_share_state_with_member(self):
         # Even if member from another tenant, it should be unauthorized
         self.assertRaises(lib_exc.Forbidden,
@@ -78,6 +79,7 @@ class AdminActionsNegativeTest(base.BaseSharesMixedTest):
                           self.sh_instance["id"], s_type="share_instances")
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skip("ccloud policy allows this")
     @testtools.skipUnless(CONF.share.run_snapshot_tests,
                           "Snapshot tests are disabled.")
     def test_try_reset_snapshot_state_with_member(self):
@@ -87,6 +89,7 @@ class AdminActionsNegativeTest(base.BaseSharesMixedTest):
                           self.sn["id"], s_type="snapshots")
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skip("ccloud policy allows this")
     def test_try_force_delete_share_with_member(self):
         # If a non-admin tries to do force_delete, it should be unauthorized
         self.assertRaises(lib_exc.Forbidden,
@@ -101,6 +104,7 @@ class AdminActionsNegativeTest(base.BaseSharesMixedTest):
                           self.sh_instance["id"], s_type="share_instances")
 
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skip("ccloud policy allows this")
     @testtools.skipUnless(CONF.share.run_snapshot_tests,
                           "Snapshot tests are disabled.")
     def test_try_force_delete_snapshot_with_member(self):
