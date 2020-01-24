@@ -302,6 +302,12 @@ ShareGroup = [
                 help="Defines whether to run the network allocation update "
                      "tests. Enable this option if the used driver "
                      "supports it."),
+    cfg.BoolOpt("run_security_service_backend_tests",
+                default=False,
+                help="Defines whether to run tests that use security services "
+                     "at share networks and run the backend driver. You may "
+                     "disable this feature if the backend driver fails on "
+                     "wrong data."),
 
     cfg.StrOpt("image_with_share_tools",
                default="manila-service-image-master",
