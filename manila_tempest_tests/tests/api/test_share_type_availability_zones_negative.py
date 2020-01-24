@@ -10,13 +10,17 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 import ddt
+from tempest import config
 from tempest.lib.common.utils import data_utils
 from tempest.lib import decorators
 from tempest.lib import exceptions as lib_exc
+import testtools
 from testtools import testcase as tc
 
 from manila_tempest_tests.tests.api import base
 from manila_tempest_tests import utils
+
+CONF = config.CONF
 
 
 @ddt.ddt
@@ -90,6 +94,8 @@ class ShareTypeAvailabilityZonesNegativeTest(base.BaseSharesMixedTest):
 
     @decorators.idempotent_id('5712abae-52a5-46ec-8850-46e732b18b06')
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API)
+    @testtools.skipUnless(
+        CONF.share.run_share_group_tests, 'Share Group tests disabled.')
     def test_share_type_azs_share_groups_unsupported(self):
         self.admin_shares_v2_client.update_share_type_extra_spec(
             self.share_type_id, self.az_spec, self.invalid_azs_spec)
