@@ -1043,7 +1043,7 @@ class BaseSharesAdminTest(BaseSharesTest):
         if CONF.share.capability_thin_provisioned:
             extra_specs_dict['thin_provisioning'] = 'True'
 
-        extra_specs_dict.update({"netapp:thin_provisioned" : 'True'})
+        extra_specs_dict.update({"netapp:thin_provisioned": 'True'})
         return extra_specs_dict
 
     @classmethod
