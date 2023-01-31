@@ -30,6 +30,9 @@ class ExportLocationsNegativeTest(base.BaseSharesMixedTest):
     def skip_checks(cls):
         super(ExportLocationsNegativeTest, cls).skip_checks()
         utils.check_skip_if_microversion_not_supported("2.9")
+        if not CONF.share.run_admin_project_member_client_tests:
+            msg = "Admin project member client tests are disabled."
+            raise cls.skipException(msg)
 
     @classmethod
     def resource_setup(cls):

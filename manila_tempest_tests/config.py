@@ -308,6 +308,10 @@ ShareGroup = [
                      "at share networks and run the backend driver. You may "
                      "disable this feature if the backend driver fails on "
                      "wrong data."),
+    cfg.BoolOpt("run_admin_project_member_client_tests",
+                default=False,
+                help="Defines whether to run tests that create admin project "
+                     "member client at run time. "),
 
     cfg.StrOpt("image_with_share_tools",
                default="manila-service-image-master",
