@@ -1245,8 +1245,8 @@ class BaseSharesMixedTest(BaseSharesAdminTest):
         cls.os_admin.domains_client = (
             cls.os_admin.identity_v3.DomainsClient() if
             CONF.identity.auth_version == 'v3' else None)
-        cls.admin_project_member_client = cls.create_user_and_get_client(
-            project=cls.admin_project, add_member_role=True)
+        # cls.admin_project_member_client = cls.create_user_and_get_client(
+        #     project=cls.admin_project, add_member_role=True)
 
         if CONF.share.multitenancy_enabled:
             if CONF.share.admin_share_network_id:
