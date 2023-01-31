@@ -91,7 +91,7 @@ class ShareTypesNegativeTest(base.BaseSharesMixedTest):
         ('2.50', None, generate_long_description(256), None),
         (LATEST_MICROVERSION, None, generate_long_description(256), None),
     )
-    @ddt.upack
+    @ddt.unpack
     def test_share_type_update_bad_request(
             self, version, st_name, st_description, st_is_public):
         st_id = self.st['id']
