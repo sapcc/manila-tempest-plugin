@@ -114,12 +114,10 @@ class ShareTypesAdminTest(base.BaseSharesAdminTest):
     @decorators.idempotent_id('a9af19e1-e789-4c4f-a39b-dd8df6ed00b1')
     @tc.attr(base.TAG_POSITIVE, base.TAG_API)
     @ddt.data(
-        ('2.50',
-         data_utils.rand_name("type_updated"), 'description_updated', True),
-        ('2.50', data_utils.rand_name("type_updated"), None,
-         None),
-        ('2.50', None, 'description_updated',
-         None),
+        ('2.50', data_utils.rand_name("type_updated"),
+         'description_updated', True),
+        ('2.50', data_utils.rand_name("type_updated"), None, None),
+        ('2.50', None, 'description_updated', None),
         ('2.50', None, None, True),
         ('2.50', None, None, False),
         (LATEST_MICROVERSION, data_utils.rand_name("type_updated"),
