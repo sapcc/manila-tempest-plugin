@@ -156,12 +156,14 @@ class SharesActionsNegativeTest(base.BaseSharesMixedTest):
         CONF.share.run_shrink_tests,
         "Share shrink tests are disabled.")
     def test_share_shrink_with_same_size(self):
-        new_size = int(self.share['size'])
+        share = self.create_share(share_type_id=self.share_type_id,
+                                  cleanup_in_class=False)
+        new_size = int(share['size'])
 
         # shrink share with invalid size and check result
         self.assertRaises(lib_exc.BadRequest,
                           self.shares_client.shrink_share,
-                          self.share['id'],
+                          share['id'],
                           new_size)
 
     @decorators.idempotent_id('d53ece5c-70e4-4953-a1d7-7d4384510519')
