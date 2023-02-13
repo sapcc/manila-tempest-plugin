@@ -90,6 +90,12 @@ class ShareNetworkSubnetsNegativeTest(base.BaseSharesAdminTest):
                           self.shares_v2_client.create_subnet,
                           share_network['id'], **data)
 
+        subnets = self.shares_v2_client.list_subnets(
+            share_network['id'])['share_network_subnets']
+        for subnet in subnets:
+            self.shares_v2_client.delete_subnet(share_network['id'],
+                                                subnet['id'])
+
     @decorators.idempotent_id('36e991c1-f09b-47dc-adc9-3da388b14612')
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API)
     def test_add_share_network_subnet_missing_parameters(self):
