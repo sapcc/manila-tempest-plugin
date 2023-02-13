@@ -1961,6 +1961,15 @@ class SharesV2Client(shares_client.SharesClient):
         body = json.loads(body)
         return rest_client.ResponseBody(resp, body)
 
+    def list_subnets(self, share_network_id):
+        url = ('share-networks/%(network)s/subnets' % {
+            'network': share_network_id}
+        )
+        resp, body = self.get(url)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
     def delete_subnet(self, share_network_id, share_network_subnet_id):
         url = ('share-networks/%(network)s/subnets/%(subnet)s' % {
             'network': share_network_id,
