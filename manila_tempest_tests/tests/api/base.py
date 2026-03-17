@@ -946,10 +946,13 @@ class BaseSharesTest(test.BaseTestCase):
 
         # NOTE(ccloud): only thin provisioned volumes are supported. Thick
         # provisioning does not work together with logical space reporting:
+        # NOTE(ccloud): netapp_flexvol_encryption is required for NAE-enabled
+        # aggregates. Unencrypted volumes cannot be created on NAE aggregates.
         optional = {
             "snapshot_support": snapshot_support,
             "create_share_from_snapshot_support": create_from_snapshot_support,
             "netapp:thin_provisioned" : 'True',
+            "netapp_flexvol_encryption": 'true',
         }
         # NOTE(gouthamr): In micro-versions < 2.24, snapshot_support is a
         # required extra-spec
