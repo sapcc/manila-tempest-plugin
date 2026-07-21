@@ -17,6 +17,7 @@ from tempest import config
 from tempest.lib.common.utils import data_utils
 from tempest.lib import decorators
 from tempest.lib import exceptions as lib_exc
+import testtools
 from testtools import testcase as tc
 
 
@@ -344,6 +345,10 @@ class ShareServerMigrationStartInvalidStatesNFS(MigrationShareServerNegative):
 
     @decorators.idempotent_id('ebe8da5b-ee9c-48c7-a7e4-9e71839f813f')
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skipUnless(
+        CONF.share.run_negative_migration_replica_tests,
+        'Share server negative migration with replica test is disabled.'
+    )
     def test_share_server_migration_start_with_share_replica(self):
         """Try server migration start with share replica."""
         if not CONF.share.backend_replication_type or (

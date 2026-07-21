@@ -75,11 +75,13 @@ class ShareNetworkSubnetsTest(base.BaseSharesMixedTest):
             "updated_at", "segmentation_id", "availability_zone", "gateway",
             "share_network_id", "mtu"
         ]
+        if utils.is_microversion_ge(CONF.share.max_api_microversion, '2.78'):
+            keys.extend(['metadata'])
 
         # Default subnet was created during share network creation
         self.assertIsNone(default_subnet['availability_zone'])
         # Match new subnet content
-        self.assertDictContainsSubset(data, created)
+        self.assertLessEqual(data.items(), created.items())
 
         self.assertEqual(sorted(keys), sorted(list(created.keys())))
 
@@ -107,7 +109,7 @@ class ShareNetworkSubnetsTest(base.BaseSharesMixedTest):
             created['id'], share_network['id'])['share_network_subnet']
 
         # Asserts
-        self.assertDictContainsSubset(data, shown)
+        self.assertLessEqual(data.items(), shown.items())
 
         # Deletes the created subnet
         self.shares_v2_client.delete_subnet(share_network['id'],
@@ -173,7 +175,7 @@ class ShareNetworkSubnetsTest(base.BaseSharesMixedTest):
         # Default subnet was created during share network creation
         self.assertIsNone(default_subnet['availability_zone'])
         # Match new subnet content
-        self.assertDictContainsSubset(data, subnet)
+        self.assertLessEqual(data.items(), subnet.items())
         # Match share server subnet
         if check_multiple_subnet:
             self.assertIn(subnet['id'],

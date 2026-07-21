@@ -53,7 +53,7 @@ class ShareRbacBaseTests(object):
             'sn': 'share_network',
         }
         key, resource_id = list(kwargs.items())[0]
-        key = key.split('_')[0]
+        key = key.rsplit('_', 1)[0]
         resource_name = key_names[key] if key in key_names else key
 
         del_action = getattr(client, 'delete_{}'.format(resource_name))
@@ -83,9 +83,10 @@ class ShareRbacBaseTests(object):
         return share
 
     @classmethod
-    def create_snapshot(cls, client, share_id, name=None):
+    def create_snapshot(cls, client, share_id, name=None, metadata=None):
         name = name or data_utils.rand_name('snapshot')
-        snapshot = client.create_snapshot(share_id, name=name)['snapshot']
+        snapshot = client.create_snapshot(
+            share_id, name=name, metadata=metadata)['snapshot']
         waiters.wait_for_resource_status(
             client, snapshot['id'], 'available', resource_name='snapshot')
         cls.addClassResourceCleanup(
@@ -113,6 +114,33 @@ class ShareRbacBaseTests(object):
             cls.delete_resource, cls.admin_shares_v2_client,
             st_id=share_type['id'])
         return share_type
+
+    @classmethod
+    def create_share_group_type(cls, share_types, is_public=True,
+                                group_specs=None):
+        name = data_utils.rand_name('share-group-type')
+        share_group_type = (
+            cls.admin_shares_v2_client.create_share_group_type(
+                name=name, share_types=share_types, is_public=is_public,
+                group_specs=group_specs))['share_group_type']
+        cls.addClassResourceCleanup(
+            cls.delete_resource, cls.admin_shares_v2_client,
+            share_group_type_id=share_group_type['id'])
+        return share_group_type
+
+    @classmethod
+    def create_share_group(cls, client, share_group_type_id, share_type_ids):
+        name = data_utils.rand_name('share-group')
+        share_group = client.create_share_group(
+            name=name, share_group_type_id=share_group_type_id,
+            share_type_ids=share_type_ids)['share_group']
+        waiters.wait_for_resource_status(
+            client, share_group['id'], 'available',
+            resource_name='share_group')
+        cls.addClassResourceCleanup(
+            cls.delete_resource, client,
+            share_group_id=share_group['id'])
+        return share_group
 
     @classmethod
     def get_share_type(cls):

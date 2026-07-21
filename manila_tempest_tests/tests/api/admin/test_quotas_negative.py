@@ -80,6 +80,7 @@ class SharesAdminQuotasNegativeTest(base.BaseSharesAdminTest):
         {"gigabytes": -2},
         {"snapshot_gigabytes": -2},
         {"share_networks": -2},
+        {"encryption_keys": -2},
     )
     @decorators.idempotent_id('07d3e69a-7cda-4ca7-9fea-c32f6830fdd3')
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API)
@@ -130,6 +131,7 @@ class SharesAdminQuotasNegativeTest(base.BaseSharesAdminTest):
         # try schedule share with size, bigger than gigabytes quota
         self.assertRaises(lib_exc.OverLimit,
                           self.create_share,
+                          share_type_id=self.share_type_id,
                           size=overquota)
 
     @decorators.idempotent_id('37dd40a8-375e-454b-8b80-229cb0eecb01')

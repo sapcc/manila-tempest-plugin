@@ -21,9 +21,9 @@ from urllib import parse
 from tempest import config
 from tempest.lib.common import rest_client
 from tempest.lib.common.utils import data_utils
+from tempest.lib import exceptions
 
 from manila_tempest_tests.common import constants
-from manila_tempest_tests.services.share.json import shares_client
 from manila_tempest_tests import share_exceptions
 from manila_tempest_tests import utils
 
@@ -32,7 +32,7 @@ LATEST_MICROVERSION = CONF.share.max_api_microversion
 EXPERIMENTAL = {'X-OpenStack-Manila-API-Experimental': 'True'}
 
 
-class SharesV2Client(shares_client.SharesClient):
+class SharesV2Client(rest_client.RestClient):
     """Tempest REST client for Manila.
 
     It handles shares and access to it in OpenStack.
@@ -42,6 +42,11 @@ class SharesV2Client(shares_client.SharesClient):
     def __init__(self, auth_provider, **kwargs):
         super(SharesV2Client, self).__init__(auth_provider, **kwargs)
         self.API_MICROVERSIONS_HEADER = 'x-openstack-manila-api-version'
+        self.share_protocol = None
+        if CONF.share.enable_protocols:
+            self.share_protocol = CONF.share.enable_protocols[0]
+        self.share_network_id = CONF.share.share_network_id
+        self.share_size = CONF.share.share_size
 
     def inject_microversion_header(self, headers, version,
                                    extra_headers=False):
@@ -199,6 +204,165 @@ class SharesV2Client(shares_client.SharesClient):
         resp_body = json.loads(resp_body)
         return resp, resp_body
 
+    def _parse_resp(self, body, top_key_to_verify=None):
+        return super(SharesV2Client, self)._parse_resp(
+            body, top_key_to_verify=top_key_to_verify)
+
+    def _is_resource_deleted(self, func, res_id, resource_name, **kwargs):
+        try:
+            res = func(res_id, **kwargs)[resource_name]
+        except exceptions.NotFound:
+            return True
+
+        if res.get('status') in ['error_deleting', 'error']:
+            # Resource has "error_deleting" status and can not be deleted.
+            resource_type = func.__name__.split('_', 1)[-1]
+            raise share_exceptions.ResourceReleaseFailed(
+                res_type=resource_type, res_id=res_id)
+        return False
+
+    def wait_for_resource_deletion(self, *args, **kwargs):
+        """Waits for a resource to be deleted."""
+        start_time = int(time.time())
+        while True:
+            if self.is_resource_deleted(*args, **kwargs):
+                return
+            if int(time.time()) - start_time >= self.build_timeout:
+                raise exceptions.TimeoutException
+            time.sleep(self.build_interval)
+
+    def update_share(self, share_id, version=LATEST_MICROVERSION, **kwargs):
+        body = json.dumps({'share': kwargs})
+        resp, body = self.put("shares/%s" % share_id, body, version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def rename_snapshot(self, snapshot_id, name, desc=None,
+                        version=LATEST_MICROVERSION):
+        body = {"snapshot": {"display_name": name}}
+        if desc is not None:
+            body["snapshot"].update({"display_description": desc})
+        body = json.dumps(body)
+        resp, body = self.put("snapshots/%s" % snapshot_id, body,
+                              version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def _map_security_service_and_share_network(self, sn_id, ss_id,
+                                                action="add",
+                                                version=LATEST_MICROVERSION):
+        # sn_id: id of share_network_entity
+        # ss_id: id of security service entity
+        # action: add, remove
+        data = {
+            "%s_security_service" % action: {
+                "security_service_id": ss_id,
+            }
+        }
+        body = json.dumps(data)
+        resp, body = self.post("share-networks/%s/action" % sn_id, body,
+                               version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def add_sec_service_to_share_network(self, sn_id, ss_id,
+                                         version=LATEST_MICROVERSION):
+        return self._map_security_service_and_share_network(
+            sn_id, ss_id, version=version)
+
+    def remove_sec_service_from_share_network(
+            self, sn_id, ss_id, version=LATEST_MICROVERSION):
+        return self._map_security_service_and_share_network(
+            sn_id, ss_id, "remove", version=version)
+
+    def list_sec_services_for_share_network(
+            self, sn_id, version=LATEST_MICROVERSION):
+        resp, body = self.get("security-services?share_network_id=%s" % sn_id,
+                              version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def add_access_to_share_type(
+            self, share_type_id, project_id, version=LATEST_MICROVERSION):
+        uri = 'types/%s/action' % share_type_id
+        post_body = {'project': project_id}
+        post_body = json.dumps({'addProjectAccess': post_body})
+        resp, body = self.post(uri, post_body, version=version)
+        self.expected_success(202, resp.status)
+        return rest_client.ResponseBody(resp, body)
+
+    def remove_access_from_share_type(
+            self, share_type_id, project_id, version=LATEST_MICROVERSION):
+        uri = 'types/%s/action' % share_type_id
+        post_body = {'project': project_id}
+        post_body = json.dumps({'removeProjectAccess': post_body})
+        resp, body = self.post(uri, post_body, version=version)
+        self.expected_success(202, resp.status)
+        return rest_client.ResponseBody(resp, body)
+
+    def get_default_share_type(self, version=LATEST_MICROVERSION):
+        resp, body = self.get("types/default", version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def get_limits(self, version=LATEST_MICROVERSION):
+        resp, body = self.get("limits", version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def list_extensions(self, version=LATEST_MICROVERSION):
+        resp, body = self.get("extensions", version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def list_pools(self, detail=False, search_opts=None,
+                   version=LATEST_MICROVERSION):
+        """Get list of scheduler pools."""
+        uri = 'scheduler-stats/pools'
+        if detail:
+            uri += '/detail'
+        if search_opts:
+            uri += "?%s" % parse.urlencode(search_opts)
+        resp, body = self.get(uri, version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def list_share_servers(self, search_opts=None,
+                           version=LATEST_MICROVERSION):
+        """Get list of share servers."""
+        uri = "share-servers"
+        if search_opts:
+            uri += "?%s" % parse.urlencode(search_opts)
+        resp, body = self.get(uri, version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def delete_share_server(self, share_server_id,
+                            version=LATEST_MICROVERSION):
+        """Delete share server by its ID."""
+        uri = "share-servers/%s" % share_server_id
+        resp, body = self.delete(uri, version=version)
+        self.expected_success(202, resp.status)
+        return rest_client.ResponseBody(resp, body)
+
+    def show_share_server_details(
+            self, share_server_id, version=LATEST_MICROVERSION):
+        """Get share server details only."""
+        uri = "share-servers/%s/details" % share_server_id
+        resp, body = self.get(uri, version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
     def is_resource_deleted(self, *args, **kwargs):
         """Verifies whether provided resource deleted or not.
 
@@ -208,33 +372,73 @@ class SharesV2Client(shares_client.SharesClient):
         """
         if "share_instance_id" in kwargs:
             return self._is_resource_deleted(
-                self.get_share_instance, kwargs.get("share_instance_id"))
+                self.get_share_instance, kwargs.get("share_instance_id"),
+                "share_instance")
         elif "share_group_id" in kwargs:
             return self._is_resource_deleted(
-                self.get_share_group, kwargs.get("share_group_id"))
+                self.get_share_group, kwargs.get("share_group_id"),
+                "share_group")
         elif "share_group_snapshot_id" in kwargs:
             return self._is_resource_deleted(
                 self.get_share_group_snapshot,
-                kwargs.get("share_group_snapshot_id"))
+                kwargs.get("share_group_snapshot_id"), "share_group_snapshot")
         elif "share_group_type_id" in kwargs:
             return self._is_resource_deleted(
-                self.get_share_group_type, kwargs.get("share_group_type_id"))
+                self.get_share_group_type, kwargs.get("share_group_type_id"),
+                "share_group_type")
         elif "replica_id" in kwargs:
             return self._is_resource_deleted(
-                self.get_share_replica, kwargs.get("replica_id"))
+                self.get_share_replica, kwargs.get("replica_id"),
+                "share_replica")
         elif "message_id" in kwargs:
             return self._is_resource_deleted(
-                self.get_message, kwargs.get("message_id"))
+                self.get_message, kwargs.get("message_id"), "message")
         elif "share_network_subnet_id" in kwargs:
             subnet_kwargs = {
-                "sn_id": kwargs["extra_params"]["share_network_id"]}
+                "share_network_id": kwargs["sn_id"]}
             return self._is_resource_deleted(
                 self.get_subnet, kwargs.get("share_network_subnet_id"),
-                **subnet_kwargs
+                "share_network_subnet", **subnet_kwargs
             )
+        elif "share_id" in kwargs:
+            if "rule_id" in kwargs:
+                rule_id = kwargs.get("rule_id")
+                share_id = kwargs.get("share_id")
+                rules = self.list_access_rules(share_id)['access_list']
+                for rule in rules:
+                    if rule["id"] == rule_id:
+                        return False
+                return True
+            else:
+                return self._is_resource_deleted(
+                    self.get_share, kwargs.get("share_id"), "share")
+        elif "snapshot_id" in kwargs:
+            return self._is_resource_deleted(
+                self.get_snapshot, kwargs.get("snapshot_id"), "snapshot")
+        elif "sn_id" in kwargs:
+            return self._is_resource_deleted(
+                self.get_share_network, kwargs.get("sn_id"), "share_network")
+        elif "ss_id" in kwargs:
+            return self._is_resource_deleted(
+                self.get_security_service, kwargs.get("ss_id"),
+                "security_service")
+        elif "vt_id" in kwargs:
+            return self._is_resource_deleted(
+                self.get_volume_type, kwargs.get("vt_id"), "volume_type")
+        elif "st_id" in kwargs:
+            return self._is_resource_deleted(
+                self.get_share_type, kwargs.get("st_id"), "share_type")
+        elif "server_id" in kwargs:
+            return self._is_resource_deleted(
+                self.show_share_server, kwargs.get("server_id"),
+                "share_server")
+        elif "backup_id" in kwargs:
+            return self._is_resource_deleted(
+                self.get_share_backup, kwargs.get("backup_id"),
+                "share_backup")
         else:
-            return super(SharesV2Client, self).is_resource_deleted(
-                *args, **kwargs)
+            raise share_exceptions.InvalidResource(
+                message=str(kwargs))
 
 ###############
 
@@ -244,7 +448,7 @@ class SharesV2Client(shares_client.SharesClient):
                      share_type_id=None, is_public=False,
                      share_group_id=None, availability_zone=None,
                      version=LATEST_MICROVERSION, experimental=False,
-                     scheduler_hints=None):
+                     scheduler_hints=None, encryption_key_ref=None):
         headers = EXPERIMENTAL if experimental else None
         metadata = metadata or {}
         scheduler_hints = scheduler_hints or {}
@@ -279,6 +483,8 @@ class SharesV2Client(shares_client.SharesClient):
             post_body["share"]["share_group_id"] = share_group_id
         if scheduler_hints:
             post_body["share"]["scheduler_hints"] = scheduler_hints
+        if encryption_key_ref:
+            post_body["share"]["encryption_key_ref"] = encryption_key_ref
 
         body = json.dumps(post_body)
         resp, body = self.post("shares", body, headers=headers,
@@ -369,6 +575,61 @@ class SharesV2Client(shares_client.SharesClient):
         body = json.dumps(post_body)
         resp, body = self.post(
             "shares/%s/action" % share_id, body, version=version)
+        self.expected_success(202, resp.status)
+        return rest_client.ResponseBody(resp, body)
+
+###############
+    def create_share_transfer(self, share_id, name=None,
+                              version=LATEST_MICROVERSION):
+        if name is None:
+            name = data_utils.rand_name("tempest-created-share-transfer")
+        post_body = {
+            "transfer": {
+                "share_id": share_id,
+                "name": name
+            }
+        }
+        body = json.dumps(post_body)
+        resp, body = self.post("share-transfers", body, version=version)
+        self.expected_success(202, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def delete_share_transfer(self, transfer_id, version=LATEST_MICROVERSION):
+        resp, body = self.delete("share-transfers/%s" % transfer_id,
+                                 version=version)
+        self.expected_success(200, resp.status)
+        return rest_client.ResponseBody(resp, body)
+
+    def list_share_transfers(self, detailed=False, params=None,
+                             version=LATEST_MICROVERSION):
+        """Get list of share transfers w/o filters."""
+        uri = 'share-transfers/detail' if detailed else 'share-transfers'
+        uri += '?%s' % parse.urlencode(params) if params else ''
+        resp, body = self.get(uri, version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def get_share_transfer(self, transfer_id, version=LATEST_MICROVERSION):
+        resp, body = self.get("share-transfers/%s" % transfer_id,
+                              version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def accept_share_transfer(self, transfer_id, auth_key,
+                              clear_access_rules=False,
+                              version=LATEST_MICROVERSION):
+        post_body = {
+            "accept": {
+                "auth_key": auth_key,
+                "clear_access_rules": clear_access_rules
+            }
+        }
+        body = json.dumps(post_body)
+        resp, body = self.post("share-transfers/%s/accept" % transfer_id,
+                               body, version=version)
         self.expected_success(202, resp.status)
         return rest_client.ResponseBody(resp, body)
 
@@ -764,7 +1025,8 @@ class SharesV2Client(shares_client.SharesClient):
     def create_access_rule(self, share_id, access_type="ip",
                            access_to="0.0.0.0", access_level=None,
                            version=LATEST_MICROVERSION, metadata=None,
-                           action_name=None):
+                           action_name=None, lock_visibility=False,
+                           lock_deletion=False):
         post_body = {
             self._get_access_action_name(version, 'os-allow_access'): {
                 "access_type": access_type,
@@ -774,6 +1036,10 @@ class SharesV2Client(shares_client.SharesClient):
         }
         if metadata is not None:
             post_body['allow_access']['metadata'] = metadata
+        if lock_visibility:
+            post_body['allow_access']['lock_visibility'] = True
+        if lock_deletion:
+            post_body['allow_access']['lock_deletion'] = True
         body = json.dumps(post_body)
         resp, body = self.post(
             "shares/%s/action" % share_id, body, version=version,
@@ -817,12 +1083,15 @@ class SharesV2Client(shares_client.SharesClient):
         return rest_client.ResponseBody(resp, body)
 
     def delete_access_rule(self, share_id, rule_id,
-                           version=LATEST_MICROVERSION, action_name=None):
+                           version=LATEST_MICROVERSION, action_name=None,
+                           unrestrict=False):
         post_body = {
             self._get_access_action_name(version, 'os-deny_access'): {
                 "access_id": rule_id,
             }
         }
+        if unrestrict:
+            post_body['deny_access']['unrestrict'] = True
         body = json.dumps(post_body)
         resp, body = self.post(
             "shares/%s/action" % share_id, body, version=version)
@@ -832,6 +1101,15 @@ class SharesV2Client(shares_client.SharesClient):
     def get_access_rule(self, access_id, version=LATEST_MICROVERSION):
         resp, body = self.get("share-access-rules/%s" % access_id,
                               version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def update_access_rule(self, access_id, access_level,
+                           version=LATEST_MICROVERSION):
+        url = 'share-access-rules/%s' % access_id
+        body = {'update_access': {"access_level": access_level}}
+        resp, body = self.put(url, json.dumps(body), version=version)
         self.expected_success(200, resp.status)
         body = json.loads(body)
         return rest_client.ResponseBody(resp, body)
@@ -1026,7 +1304,7 @@ class SharesV2Client(shares_client.SharesClient):
                       share_networks=None,
                       share_groups=None, share_group_snapshots=None,
                       force=True, share_type=None, share_replicas=None,
-                      replica_gigabytes=None, url=None,
+                      replica_gigabytes=None, encryption_keys=None, url=None,
                       version=LATEST_MICROVERSION):
         if url is None:
             url = self._get_quotas_url(version)
@@ -1054,6 +1332,8 @@ class SharesV2Client(shares_client.SharesClient):
             put_body["share_replicas"] = share_replicas
         if replica_gigabytes is not None:
             put_body["replica_gigabytes"] = replica_gigabytes
+        if encryption_keys is not None:
+            put_body["encryption_keys"] = encryption_keys
         put_body = json.dumps({"quota_set": put_body})
 
         resp, body = self.put(url, put_body, version=version)
@@ -1508,9 +1788,12 @@ class SharesV2Client(shares_client.SharesClient):
             }
         }
 
+        headers, extra_headers = utils.get_extra_headers(
+            version, constants.SHARE_MIGRATION_GRADUATION_VERSION)
         body = json.dumps(body)
         resp, body = self.post('shares/%s/action' % share_id, body,
-                               headers=EXPERIMENTAL, extra_headers=True,
+                               headers=headers,
+                               extra_headers=extra_headers,
                                version=version)
         return rest_client.ResponseBody(resp, body)
 
@@ -1519,9 +1802,12 @@ class SharesV2Client(shares_client.SharesClient):
         post_body = {
             action_name: None,
         }
+        headers, extra_headers = utils.get_extra_headers(
+            version, constants.SHARE_MIGRATION_GRADUATION_VERSION)
         body = json.dumps(post_body)
         resp, body = self.post('shares/%s/action' % share_id, body,
-                               headers=EXPERIMENTAL, extra_headers=True,
+                               headers=headers,
+                               extra_headers=extra_headers,
                                version=version)
         return rest_client.ResponseBody(resp, body)
 
@@ -1530,9 +1816,12 @@ class SharesV2Client(shares_client.SharesClient):
         post_body = {
             action_name: None,
         }
+        headers, extra_headers = utils.get_extra_headers(
+            version, constants.SHARE_MIGRATION_GRADUATION_VERSION)
         body = json.dumps(post_body)
         resp, body = self.post('shares/%s/action' % share_id, body,
-                               headers=EXPERIMENTAL, extra_headers=True,
+                               headers=headers,
+                               extra_headers=extra_headers,
                                version=version)
         return rest_client.ResponseBody(resp, body)
 
@@ -1541,9 +1830,12 @@ class SharesV2Client(shares_client.SharesClient):
         post_body = {
             action_name: None,
         }
+        headers, extra_headers = utils.get_extra_headers(
+            version, constants.SHARE_MIGRATION_GRADUATION_VERSION)
         body = json.dumps(post_body)
         resp, body = self.post('shares/%s/action' % share_id, body,
-                               headers=EXPERIMENTAL, extra_headers=True,
+                               headers=headers,
+                               extra_headers=extra_headers,
                                version=version)
         body = json.loads(body)
         return rest_client.ResponseBody(resp, body)
@@ -1556,15 +1848,18 @@ class SharesV2Client(shares_client.SharesClient):
                 'task_state': task_state,
             }
         }
+        headers, extra_headers = utils.get_extra_headers(
+            version, constants.SHARE_MIGRATION_GRADUATION_VERSION)
         body = json.dumps(post_body)
         resp, body = self.post('shares/%s/action' % share_id, body,
-                               headers=EXPERIMENTAL, extra_headers=True,
+                               headers=headers,
+                               extra_headers=extra_headers,
                                version=version)
         return rest_client.ResponseBody(resp, body)
 
     def create_share_replica(self, share_id, availability_zone=None,
                              scheduler_hints=None, share_network_id=None,
-                             version=LATEST_MICROVERSION):
+                             metadata=None, version=LATEST_MICROVERSION):
         """Add a share replica of an existing share."""
         uri = "share-replicas"
         post_body = {
@@ -1576,6 +1871,9 @@ class SharesV2Client(shares_client.SharesClient):
             post_body["scheduler_hints"] = scheduler_hints
         if share_network_id:
             post_body['share_network_id'] = share_network_id
+
+        if utils.is_microversion_ge(version, "2.95") and metadata:
+            post_body["metadata"] = metadata
 
         headers, extra_headers = utils.get_extra_headers(
             version, constants.SHARE_REPLICA_GRADUATION_VERSION)
@@ -1781,6 +2079,151 @@ class SharesV2Client(shares_client.SharesClient):
         body = json.loads(body)
         return rest_client.ResponseBody(resp, body)
 
+    def create_share_network(self, version=LATEST_MICROVERSION, **kwargs):
+        """Create a share network.
+
+        :param version: API microversion to use (default: LATEST_MICROVERSION)
+        :param kwargs: Share network parameters (name, description,
+            neutron_net_id, neutron_subnet_id, etc.)
+        :return: ResponseBody containing the created share_network
+        """
+        body = json.dumps({"share_network": kwargs})
+        resp, body = self.post("share-networks", body, version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def update_share_network(self, sn_id, version=LATEST_MICROVERSION,
+                             **kwargs):
+        """Update a share network.
+
+        :param sn_id: Share network ID to update
+        :param version: API microversion to use (default: LATEST_MICROVERSION)
+        :param kwargs: Share network parameters to update (name,
+            description, etc.)
+        :return: ResponseBody containing the updated share_network
+        """
+        body = json.dumps({"share_network": kwargs})
+        resp, body = self.put("share-networks/%s" % sn_id, body,
+                              version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def delete_share_network(self, sn_id, version=LATEST_MICROVERSION):
+        """Delete a share network.
+
+        :param sn_id: Share network ID to delete
+        :param version: API microversion to use (default: LATEST_MICROVERSION)
+        :return: ResponseBody
+        """
+        resp, body = self.delete("share-networks/%s" % sn_id, version=version)
+        self.expected_success(202, resp.status)
+        return rest_client.ResponseBody(resp, body)
+
+###############
+
+    def get_share_backup(self, backup_id, version=LATEST_MICROVERSION):
+        """Returns the details of a single backup."""
+        resp, body = self.get("share-backups/%s" % backup_id,
+                              headers=EXPERIMENTAL,
+                              extra_headers=True,
+                              version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def list_share_backups(self, share_id=None, version=LATEST_MICROVERSION):
+        """Get list of backups."""
+        uri = "share-backups/detail"
+        if share_id:
+            uri += (f'?share_id={share_id}')
+        resp, body = self.get(uri, headers=EXPERIMENTAL,
+                              extra_headers=True, version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def create_share_backup(self, share_id, name=None, description=None,
+                            backup_options=None, version=LATEST_MICROVERSION):
+        """Create a share backup."""
+        if name is None:
+            name = data_utils.rand_name("tempest-created-share-backup")
+        if description is None:
+            description = data_utils.rand_name(
+                "tempest-created-share-backup-desc")
+        post_body = {
+            'share_backup': {
+                'name': name,
+                'description': description,
+                'share_id': share_id,
+                'backup_options': backup_options,
+            }
+        }
+        body = json.dumps(post_body)
+        resp, body = self.post('share-backups', body,
+                               headers=EXPERIMENTAL,
+                               extra_headers=True,
+                               version=version)
+
+        self.expected_success(202, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def delete_share_backup(self, backup_id, version=LATEST_MICROVERSION):
+        """Delete share backup."""
+        uri = "share-backups/%s" % backup_id
+        resp, body = self.delete(uri,
+                                 headers=EXPERIMENTAL,
+                                 extra_headers=True,
+                                 version=version)
+        self.expected_success(202, resp.status)
+        return rest_client.ResponseBody(resp, body)
+
+    def restore_share_backup(self, backup_id, version=LATEST_MICROVERSION):
+        """Restore share backup."""
+        uri = "share-backups/%s/action" % backup_id
+        body = {'restore': None}
+        resp, body = self.post(uri, json.dumps(body),
+                               headers=EXPERIMENTAL,
+                               extra_headers=True,
+                               version=version)
+        self.expected_success(202, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def update_share_backup(self, backup_id, name=None, description=None,
+                            version=LATEST_MICROVERSION):
+        """Update share backup."""
+        uri = "share-backups/%s" % backup_id
+        post_body = {}
+        if name:
+            post_body['name'] = name
+        if description:
+            post_body['description'] = description
+
+        body = json.dumps({'share_backup': post_body})
+        resp, body = self.put(uri, body,
+                              headers=EXPERIMENTAL,
+                              extra_headers=True,
+                              version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def reset_state_share_backup(self, backup_id,
+                                 status=constants.STATUS_AVAILABLE,
+                                 version=LATEST_MICROVERSION):
+
+        uri = "share-backups/%s/action" % backup_id
+        body = {'reset_status': {'status': status}}
+        resp, body = self.post(uri, json.dumps(body),
+                               headers=EXPERIMENTAL,
+                               extra_headers=True,
+                               version=LATEST_MICROVERSION)
+        self.expected_success(202, resp.status)
+        return rest_client.ResponseBody(resp, body)
+
 ################
 
     def create_snapshot_access_rule(self, snapshot_id, access_type="ip",
@@ -1925,11 +2368,18 @@ class SharesV2Client(shares_client.SharesClient):
         body = json.loads(body)
         return rest_client.ResponseBody(resp, body)
 
+    def delete_security_service(self, ss_id, version=LATEST_MICROVERSION):
+        resp, body = self.delete("security-services/%s" % ss_id,
+                                 version=version)
+        self.expected_success(202, resp.status)
+        return rest_client.ResponseBody(resp, body)
+
 ###############
 
     def create_subnet(
             self, share_network_id, availability_zone=None,
-            neutron_net_id=None, neutron_subnet_id=None):
+            neutron_net_id=None, neutron_subnet_id=None,
+            metadata=None, version=LATEST_MICROVERSION):
         body = {'share_network_id': share_network_id}
 
         if availability_zone:
@@ -1938,6 +2388,9 @@ class SharesV2Client(shares_client.SharesClient):
             body['neutron_net_id'] = neutron_net_id
         if neutron_subnet_id:
             body['neutron_subnet_id'] = neutron_subnet_id
+
+        if utils.is_microversion_ge(version, "2.78") and metadata:
+            body["metadata"] = metadata
         body = json.dumps({"share-network-subnet": body})
         url = '/share-networks/%s/subnets' % share_network_id
         resp, body = self.post(url, body, version=LATEST_MICROVERSION)
@@ -2082,7 +2535,8 @@ class SharesV2Client(shares_client.SharesClient):
 #################
 
     def _update_metadata(self, resource, resource_id, metadata=None,
-                         method="post", parent_resource=None, parent_id=None):
+                         method="post", parent_resource=None, parent_id=None,
+                         version=LATEST_MICROVERSION):
         if parent_resource is None:
             uri = f'{resource}s/{resource_id}/metadata'
         else:
@@ -2093,58 +2547,130 @@ class SharesV2Client(shares_client.SharesClient):
         post_body = {"metadata": metadata}
         body = json.dumps(post_body)
         if method == "post":
-            resp, body = self.post(uri, body)
+            resp, body = self.post(uri, body, version=version)
         if method == "put":
-            resp, body = self.put(uri, body)
+            resp, body = self.put(uri, body, version=version)
         self.expected_success(200, resp.status)
         body = json.loads(body)
         return rest_client.ResponseBody(resp, body)
 
     def set_metadata(self, resource_id, metadata=None, resource='share',
-                     parent_resource=None, parent_id=None):
+                     parent_resource=None, parent_id=None,
+                     version=LATEST_MICROVERSION):
         return self._update_metadata(resource, resource_id, metadata,
                                      method="post",
                                      parent_resource=parent_resource,
-                                     parent_id=parent_id)
+                                     parent_id=parent_id,
+                                     version=version)
 
     def update_all_metadata(self, resource_id, metadata=None,
                             resource='share', parent_resource=None,
-                            parent_id=None):
+                            parent_id=None, version=LATEST_MICROVERSION):
         return self._update_metadata(resource, resource_id, metadata,
                                      method="put",
                                      parent_resource=parent_resource,
-                                     parent_id=parent_id)
+                                     parent_id=parent_id,
+                                     version=version)
 
     def delete_metadata(self, resource_id, key, resource='share',
-                        parent_resource=None, parent_id=None):
+                        parent_resource=None, parent_id=None,
+                        version=LATEST_MICROVERSION):
         if parent_resource is None:
             uri = f'{resource}s/{resource_id}/metadata/{key}'
         else:
             uri = (f'{parent_resource}/{parent_id}'
                    f'/{resource}s/{resource_id}/metadata/{key}')
-        resp, body = self.delete(uri)
+        resp, body = self.delete(uri, version=version)
         self.expected_success(200, resp.status)
         return rest_client.ResponseBody(resp, body)
 
     def get_metadata(self, resource_id, resource='share',
-                     parent_resource=None, parent_id=None):
+                     parent_resource=None, parent_id=None,
+                     version=LATEST_MICROVERSION):
         if parent_resource is None:
             uri = f'{resource}s/{resource_id}/metadata'
         else:
             uri = (f'{parent_resource}/{parent_id}'
                    f'/{resource}s/{resource_id}/metadata')
-        resp, body = self.get(uri)
+        resp, body = self.get(uri, version=version)
         self.expected_success(200, resp.status)
         body = json.loads(body)
         return rest_client.ResponseBody(resp, body)
 
     def get_metadata_item(self, resource_id, key, resource='share',
-                          parent_resource=None, parent_id=None):
+                          parent_resource=None, parent_id=None,
+                          version=LATEST_MICROVERSION):
         if parent_resource is None:
             uri = f'{resource}s/{resource_id}/metadata/{key}'
         else:
             uri = (f'{parent_resource}/{parent_id}'
                    f'/{resource}s/{resource_id}/metadata/{key}')
-        resp, body = self.get(uri)
+        resp, body = self.get(uri, version=version)
         self.expected_success(200, resp.status)
-        return self._parse_resp(body)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+#################
+
+    def create_resource_lock(self, resource_id, resource_type,
+                             resource_action='delete', lock_reason=None,
+                             version=LATEST_MICROVERSION):
+        body = {
+            "resource_lock": {
+                'resource_id': resource_id,
+                'resource_type': resource_type,
+                'resource_action': resource_action,
+                'lock_reason': lock_reason,
+            },
+        }
+        body = json.dumps(body)
+        resp, body = self.post("resource-locks", body, version=version)
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def get_resource_lock(self, lock_id, version=LATEST_MICROVERSION):
+        resp, body = self.get("resource-locks/%s" % lock_id, version=version)
+
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def list_resource_locks(self, filters=None, version=LATEST_MICROVERSION):
+        uri = (
+            "resource-locks?%s" % parse.urlencode(filters)
+            if filters else "resource-locks"
+        )
+
+        resp, body = self.get(uri, version=version)
+
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def update_resource_lock(self,
+                             lock_id,
+                             resource_action=None,
+                             lock_reason=None,
+                             version=LATEST_MICROVERSION):
+        uri = 'resource-locks/%s' % lock_id
+        post_body = {}
+        if resource_action:
+            post_body['resource_action'] = resource_action
+        if lock_reason:
+            post_body['lock_reason'] = lock_reason
+        body = json.dumps({'resource_lock': post_body})
+
+        resp, body = self.put(uri, body, version=version)
+
+        self.expected_success(200, resp.status)
+        body = json.loads(body)
+        return rest_client.ResponseBody(resp, body)
+
+    def delete_resource_lock(self, lock_id, version=LATEST_MICROVERSION):
+        uri = "resource-locks/%s" % lock_id
+
+        resp, body = self.delete(uri, version=version)
+
+        self.expected_success(204, resp.status)
+        return rest_client.ResponseBody(resp, body)

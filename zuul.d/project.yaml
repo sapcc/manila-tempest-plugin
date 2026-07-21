@@ -8,18 +8,13 @@
       jobs:
         - manila-tempest-plugin-dummy-no-dhss
         - manila-tempest-plugin-dummy-dhss
-        - manila-tempest-plugin-lvm-yoga
-        - manila-tempest-plugin-lvm-xena
+        - manila-tempest-plugin-lvm-2026.1
+        - manila-tempest-plugin-lvm-2025.2
+        - manila-tempest-plugin-lvm-2025.1
         - manila-tempest-plugin-dummy-no-dhss-rbac
         - manila-tempest-plugin-container:
-            voting: false
-        - manila-tempest-plugin-glusterfs-nfs:
             voting: false
     gate:
       jobs:
         - manila-tempest-plugin-dummy-no-dhss
         - manila-tempest-plugin-dummy-dhss
-    experimental:
-      jobs:
-        - manila-tempest-plugin-glusterfs-native:
-            voting: false

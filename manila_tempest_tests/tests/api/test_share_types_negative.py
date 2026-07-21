@@ -55,43 +55,45 @@ class ShareTypesNegativeTest(base.BaseSharesMixedTest):
         self.assertRaises(lib_exc.Forbidden,
                           self.create_share_type,
                           data_utils.rand_name("used_user_creds"),
-                          client=self.shares_client)
+                          client=self.shares_v2_client)
 
     @decorators.idempotent_id('857c664f-e634-4865-ba05-bdcd4336725d')
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API)
     def test_try_delete_share_type_with_user(self):
         self.assertRaises(lib_exc.Forbidden,
-                          self.shares_client.delete_share_type,
+                          self.shares_v2_client.delete_share_type,
                           self.st["id"])
 
     @decorators.idempotent_id('06203276-f6a3-4a07-a014-8749763395d6')
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API)
     def test_try_add_access_to_share_type_with_user(self):
         self.assertRaises(lib_exc.Forbidden,
-                          self.shares_client.add_access_to_share_type,
+                          self.shares_v2_client.add_access_to_share_type,
                           self.st['id'],
-                          self.shares_client.tenant_id)
+                          self.shares_v2_client.tenant_id)
 
     @decorators.idempotent_id('08b2d093-2ad8-46aa-8112-81d50547f36d')
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API)
     def test_try_remove_access_from_share_type_with_user(self):
         self.assertRaises(lib_exc.Forbidden,
-                          self.shares_client.remove_access_from_share_type,
+                          self.shares_v2_client.remove_access_from_share_type,
                           self.st['id'],
-                          self.shares_client.tenant_id)
+                          self.shares_v2_client.tenant_id)
 
     @utils.skip_if_microversion_not_supported("2.50")
     @decorators.idempotent_id('4a22945c-8988-43a1-88c9-eb86e6abcd8e')
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API)
-    @ddt.data(
-        ('2.50', '', None, None),
-        (LATEST_MICROVERSION, '', None, None),
-        ('2.50', None, None, 'not_bool'),
-        (LATEST_MICROVERSION, None, None, 'not_bool'),
-        ('2.50', None, generate_long_description(256), None),
-        (LATEST_MICROVERSION, None, generate_long_description(256), None),
+    @ddt.named_data(
+        ('2_50', '2.50', '', None, None),
+        (LATEST_MICROVERSION, LATEST_MICROVERSION, '', None, None),
+        ('2_50_bad_public', '2.50', None, None, 'not_bool'),
+        (f'{LATEST_MICROVERSION}_bad_public', LATEST_MICROVERSION, None, None,
+         'not_bool'),
+        ('2_50_description', '2.50', None, generate_long_description(256),
+         None),
+        (f'{LATEST_MICROVERSION}_description', LATEST_MICROVERSION, None,
+         generate_long_description(256), None),
     )
-    @ddt.unpack
     def test_share_type_update_bad_request(
             self, version, st_name, st_description, st_is_public):
         st_id = self.st['id']

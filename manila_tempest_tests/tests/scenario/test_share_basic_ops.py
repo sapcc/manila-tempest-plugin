@@ -45,9 +45,7 @@ class ShareBasicOpsBase(manager.ShareScenarioTest):
      * Terminate the instance
     """
 
-    @decorators.idempotent_id('825be71c-cf14-4884-a0ad-cf47d511df9a')
-    @tc.attr(base.TAG_POSITIVE, base.TAG_BACKEND)
-    def test_mount_share_one_vm(self):
+    def _test_mount_share_one_vm(self):
         instance = self.boot_instance(wait_until="BUILD")
         share = self.create_share()
         locations = self.get_user_export_locations(share)
@@ -253,7 +251,8 @@ class ShareBasicOpsBase(manager.ShareScenarioTest):
         instance = self.boot_instance(wait_until="BUILD")
 
         # 2 - Create share S1, ok, created
-        extra_specs = {'snapshot_support': True}
+        extra_specs = {'snapshot_support': True,
+                       'create_share_from_snapshot_support': True}
         parent_share = self.create_share(extra_specs=extra_specs)
         parent_share_export_location = self.get_user_export_locations(
             parent_share)[0]
@@ -354,7 +353,8 @@ class ShareBasicOpsBase(manager.ShareScenarioTest):
         instance = self.boot_instance(wait_until="BUILD")
 
         # 2 - Create share S1, ok, created
-        extra_specs = {'snapshot_support': True}
+        extra_specs = {'snapshot_support': True,
+                       'mount_snapshot_support': True}
         parent_share = self.create_share(extra_specs=extra_specs)
         user_export_location = self.get_user_export_locations(parent_share)[0]
 
@@ -417,32 +417,41 @@ class ShareBasicOpsBase(manager.ShareScenarioTest):
             "sudo touch %s/file3" % snapshot_dir)
 
 
+@ddt.ddt
 class TestShareBasicOpsNFS(manager.BaseShareScenarioNFSTest,
                            ShareBasicOpsBase):
-    pass
+
+    @decorators.idempotent_id('4bad2073-a19b-4851-8cbe-75b20ade5cdb')
+    @tc.attr(base.TAG_POSITIVE, base.TAG_BACKEND)
+    @ddt.data(*utils.deduplicate(CONF.share.nfs_versions))
+    def test_mount_share_one_vm(self, nfs_version):
+        self.nfs_version = nfs_version
+        self._test_mount_share_one_vm()
 
 
 class TestShareBasicOpsCIFS(manager.BaseShareScenarioCIFSTest,
                             ShareBasicOpsBase):
 
+    @testtools.skipIf(
+        "cifs" not in CONF.share.enable_ro_access_level_for_protocols,
+        "RO access rule tests are disabled for CIFS protocol.")
     @decorators.idempotent_id('4344a47a-d316-496b-97a4-12a59297950a')
     @tc.attr(base.TAG_NEGATIVE, base.TAG_BACKEND)
     def test_write_with_ro_access(self):
-        msg = ("Skipped for CIFS protocol because RO access is not "
-               "supported for shares by IP.")
-        raise self.skipException(msg)
+        super(TestShareBasicOpsCIFS, self).test_write_with_ro_access()
 
+    @decorators.skip_because(bug='1649573')
     @decorators.idempotent_id('a691332b-dd7a-4041-9bbd-3893e168aefa')
     @tc.attr(base.TAG_POSITIVE, base.TAG_BACKEND)
     def test_read_mountable_snapshot(self):
-        msg = "Skipped for CIFS protocol because of bug/1649573"
-        raise self.skipException(msg)
+        super(TestShareBasicOpsCIFS, self).test_read_mountable_snapshot()
 
+    @decorators.skip_because(bug='1649573')
     @decorators.idempotent_id('8c936c3e-4793-49d2-8409-4038f03e7012')
     @tc.attr(base.TAG_POSITIVE, base.TAG_BACKEND)
     def test_write_data_to_share_created_from_snapshot(self):
-        msg = "Skipped for CIFS protocol because of bug/1649573"
-        raise self.skipException(msg)
+        super(TestShareBasicOpsCIFS,
+              self).test_write_data_to_share_created_from_snapshot()
 
 
 class TestBaseShareBasicOpsScenarioCEPHFS(manager.BaseShareScenarioCEPHFSTest,
@@ -451,8 +460,7 @@ class TestBaseShareBasicOpsScenarioCEPHFS(manager.BaseShareScenarioCEPHFSTest,
     @tc.attr(base.TAG_POSITIVE, base.TAG_BACKEND)
     def test_mount_share_one_vm_with_ceph_fuse_client(self):
         self.mount_client = 'fuse'
-        super(TestBaseShareBasicOpsScenarioCEPHFS,
-              self).test_mount_share_one_vm()
+        self._test_mount_share_one_vm()
 
     @decorators.idempotent_id('a2a70b94-f5fc-438a-9dfa-53aa60ee3949')
     @tc.attr(base.TAG_POSITIVE, base.TAG_BACKEND)

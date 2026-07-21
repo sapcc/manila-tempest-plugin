@@ -52,9 +52,7 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
         cls.compute_floating_ips_client = (
             cls.os_primary.compute_floating_ips_client)
         # Manila clients
-        cls.shares_client = cls.os_primary.share_v1.SharesClient()
         cls.shares_v2_client = cls.os_primary.share_v2.SharesV2Client()
-        cls.shares_admin_client = cls.os_admin.share_v1.SharesClient()
         cls.shares_admin_v2_client = cls.os_admin.share_v2.SharesV2Client()
 
     @classmethod
@@ -84,7 +82,7 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
         if CONF.share.image_with_share_tools == 'centos':
             self.image_ref = self._create_centos_based_glance_image()
         elif CONF.share.image_with_share_tools:
-            images = self.compute_images_client.list_images()["images"]
+            images = self.image_client.list_images()["images"]
             for img in images:
                 if img["name"] == CONF.share.image_with_share_tools:
                     self.image_id = img['id']
@@ -186,8 +184,12 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
                         storage_net_nic[0]['addr']
                     )
             # Attach a floating IP
-            self.compute_floating_ips_client.associate_floating_ip_to_server(
-                floating_ip['floating_ip_address'], instance['id'])
+            self.associate_floating_ip(floating_ip, instance, ip_addr=ip_addr)
+            # Wait for the floating IP to be reflected in the server's
+            # addresses before attempting SSH. On busy CI nodes, the
+            # Neutron L3 agent may take time to program NAT rules.
+            waiters.wait_for_server_floating_ip(
+                self.servers_client, instance, floating_ip)
 
         self.assertIsNotNone(server_ip)
         # Check ssh
@@ -230,8 +232,7 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
     def write_data_to_mounted_share_using_dd(self, remote_client,
                                              output_file,
                                              block_size,
-                                             block_count,
-                                             input_file='/dev/zero'):
+                                             block_count):
         """Writes data to mounted share using dd command
 
         Example Usage for writing 512Mb to a file on /mnt/
@@ -244,13 +245,12 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
         :param block_size: The size of an individual block in bytes
         :param block_count: The number of blocks to write
         :param output_file: Path to the file to be written
-        :param input_file: Path to the file to read from
         """
         block_count = int(block_count)
         remote_client.exec_command(
-            "sudo sh -c \"dd bs={} count={} if={} of={} conv=fsync"
-            " iflag=fullblock\""
-            .format(block_size, block_count, input_file, output_file))
+            "sudo sh -c \"dd bs={} count={} if={} of={} iflag=fullblock\""
+            .format(block_size, block_count, CONF.share.dd_input_file,
+                    output_file))
 
     def read_data_from_mounted_share(self,
                                      remote_client,
@@ -305,7 +305,9 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
             'pkey': kwargs.get('private_key'),
         }
 
-        linux_client = remote_client.RemoteClient(ip, **client_params)
+        linux_client = remote_client.RemoteClient(
+            ip, server=kwargs.get('server'),
+            servers_client=self.servers_client, **client_params)
         try:
             linux_client.validate_authentication()
         except Exception:
@@ -348,7 +350,7 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
         :param share_id: id of the share
         :param access_rule_id: id of the rule that will be deleted
         """
-        client = client or self.shares_client
+        client = client or self.shares_v2_client
         client.delete_access_rule(share_id, access_rule_id)
         share_waiters.wait_for_resource_status(
             self.shares_v2_client, share_id, "active",
@@ -456,7 +458,7 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
 
     def get_share_type(self, extra_specs=None):
         if CONF.share.default_share_type_name:
-            return self.shares_client.get_default_share_type()['share_type']
+            return self.shares_v2_client.get_default_share_type()['share_type']
         extra_specs_dict = {
             'driver_handles_share_servers': CONF.share.multitenancy_enabled
         }
@@ -510,7 +512,7 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
         :param cleanup: default: True
         :returns: a created share
         """
-        client = client or self.shares_client
+        client = client or self.shares_v2_client
         description = description or "Tempest's share"
         if not name:
             name = data_utils.rand_name("manila-scenario")
@@ -529,7 +531,7 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
             'share_network_id': share_network_id,
             'share_type_id': share_type_id,
         }
-        share = self.shares_client.create_share(**kwargs)['share']
+        share = self.shares_v2_client.create_share(**kwargs)['share']
 
         if cleanup:
             self.addCleanup(client.wait_for_resource_deletion,
@@ -557,7 +559,7 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
         :param sn_id: shared network id
         :param client: client object
         """
-        client = client or self.shares_admin_client
+        client = client or self.shares_admin_v2_client
         servers = client.list_share_servers(
             search_opts={"share_network": sn_id})['share_servers']
         for server in servers:
@@ -572,7 +574,7 @@ class ShareScenarioTest(manager.NetworkScenarioTest):
         :returns: a created share network
         """
 
-        client = client or self.shares_client
+        client = client or self.shares_v2_client
         sn = client.create_share_network(**kwargs)['share_network']
 
         self.addCleanup(client.wait_for_resource_deletion,
@@ -755,8 +757,11 @@ class BaseShareScenarioNFSTest(ShareScenarioTest):
         self.validate_ping_to_export_location(location, ssh_client)
 
         target_dir = target_dir or "/mnt"
+        nfs_version = getattr(self, 'nfs_version', None)
+        version_option = f"-o vers={nfs_version}" if nfs_version else ""
         ssh_client.exec_command(
-            "sudo mount -vt nfs \"%s\" %s" % (location, target_dir)
+            "sudo mount -vt nfs %s \"%s\" %s" % (
+                version_option, location, target_dir)
         )
 
 

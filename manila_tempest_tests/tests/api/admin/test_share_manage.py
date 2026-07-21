@@ -88,6 +88,12 @@ class ManageNFSShareTest(base.BaseSharesAdminTest):
         if utils.is_microversion_ge(version, "2.8"):
             export_path = share['export_locations'][0]['path']
 
+        export_path = (
+            share['instances'][0]['id']
+            if CONF.share.manage_with_share_or_snapshot_id
+            else export_path
+        )
+
         # Manage share
         manage_params = {
             'service_host': share['host'],
@@ -99,6 +105,7 @@ class ManageNFSShareTest(base.BaseSharesAdminTest):
             'is_public': is_public,
             'version': version,
         }
+
         if CONF.share.multitenancy_enabled:
             manage_params['share_server_id'] = share['share_server_id']
         managed_share = self.shares_v2_client.manage_share(
@@ -107,7 +114,7 @@ class ManageNFSShareTest(base.BaseSharesAdminTest):
         # Add managed share to cleanup queue
         self.method_resources.insert(
             0, {'type': 'share', 'id': managed_share['id'],
-                'client': self.shares_client})
+                'client': self.shares_v2_client})
 
         # Wait for success
         waiters.wait_for_resource_status(self.shares_v2_client,

@@ -13,10 +13,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from tempest import config
 from tempest.lib import decorators
 from testtools import testcase as tc
 
 from manila_tempest_tests.tests.api import base
+
+CONF = config.CONF
 
 
 class SharesMetadataTest(base.BaseSharesMixedTest):
@@ -33,23 +36,17 @@ class SharesMetadataTest(base.BaseSharesMixedTest):
 
     def _verify_share_metadata(self, share, md):
 
-        # get metadata of share
-        metadata = self.shares_v2_client.get_metadata(share["id"])['metadata']
-
-        # verify metadata
-        self.assertEqual(md, metadata)
-
         # verify metadata items
         for key in md:
-            get_value = self.shares_v2_client.get_metadata_item(share["id"],
-                                                                key)
+            get_value = self.shares_v2_client.get_metadata_item(
+                share["id"], key)['meta']
             self.assertEqual(md[key], get_value[key])
 
     @decorators.idempotent_id('9070249f-6e94-4a38-a036-08debee547c3')
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
     def test_set_metadata_in_share_creation(self):
 
-        md = {u"key1": u"value1", u"key2": u"value2", }
+        md = {"key1": "value1", "key2": "value2", }
 
         # create share with metadata
         share = self.create_share(share_type_id=self.share_type_id,
@@ -63,7 +60,7 @@ class SharesMetadataTest(base.BaseSharesMixedTest):
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
     def test_set_get_delete_metadata(self):
 
-        md = {u"key3": u"value3", u"key4": u"value4", u"key.5.1": u"value.5"}
+        md = {"key3": "value3", "key4": "value4", "key.5.1": "value.5"}
 
         # create share
         share = self.create_share(share_type_id=self.share_type_id,
@@ -82,13 +79,14 @@ class SharesMetadataTest(base.BaseSharesMixedTest):
         # verify deletion of metadata
         get_metadata = self.shares_v2_client.get_metadata(share["id"])[
             'metadata']
-        self.assertEmpty(get_metadata)
+        for key in md.keys():
+            self.assertNotIn(key, list(get_metadata.keys()))
 
     @decorators.idempotent_id('4e5f8159-62b6-4d5c-f729-d8b1f029d7de')
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
     def test_set_metadata_not_delete_pre_metadata(self):
-        md1 = {u"key9": u"value9", u"key10": u"value10", }
-        md2 = {u"key11": u"value11", u"key12": u"value12", }
+        md1 = {"key9": "value9", "key10": "value10", }
+        md2 = {"key11": "value11", "key12": "value12", }
 
         # create share
         share = self.create_share(share_type_id=self.share_type_id,
@@ -117,13 +115,14 @@ class SharesMetadataTest(base.BaseSharesMixedTest):
         # verify deletion of metadata
         get_metadata = self.shares_v2_client.get_metadata(
             share["id"])['metadata']
-        self.assertEmpty(get_metadata)
+        for key in md.keys():
+            self.assertNotIn(key, list(get_metadata.keys()))
 
     @decorators.idempotent_id('2ec70ba5-050b-3b17-c862-c149e53543c0')
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
     def test_set_metadata_key_already_exist(self):
-        md1 = {u"key9": u"value9", u"key10": u"value10", }
-        md2 = {u"key9": u"value13", u"key11": u"value11", }
+        md1 = {"key9": "value9", "key10": "value10", }
+        md2 = {"key9": "value13", "key11": "value11", }
 
         # create share
         share = self.create_share(share_type_id=self.share_type_id,
@@ -139,8 +138,8 @@ class SharesMetadataTest(base.BaseSharesMixedTest):
         self.shares_v2_client.set_metadata(share["id"], md2)
 
         # verify metadata
-        md = {u"key9": u"value13", u"key10": u"value10",
-              u"key11": u"value11"}
+        md = {"key9": "value13", "key10": "value10",
+              "key11": "value11"}
         self._verify_share_metadata(share, md)
 
         # delete metadata
@@ -150,14 +149,15 @@ class SharesMetadataTest(base.BaseSharesMixedTest):
         # verify deletion of metadata
         get_metadata = self.shares_v2_client.get_metadata(
             share["id"])['metadata']
-        self.assertEmpty(get_metadata)
+        for key in md.keys():
+            self.assertNotIn(key, list(get_metadata.keys()))
 
     @decorators.idempotent_id('c94851f4-2559-4712-9297-9912db1da7ff')
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
     def test_set_and_update_metadata_by_key(self):
 
-        md1 = {u"key5": u"value5", u"key6": u"value6", }
-        md2 = {u"key7": u"value7", u"key8": u"value8", }
+        md1 = {"key5": "value5", "key6": "value6", }
+        md2 = {"key7": "value7", "key8": "value8", }
 
         # create share
         share = self.create_share(share_type_id=self.share_type_id,
@@ -228,7 +228,7 @@ class SharesMetadataTest(base.BaseSharesMixedTest):
 
         body_get = self.shares_v2_client.get_metadata(
             self.share["id"])['metadata']
-        self.assertEqual(data, body_get)
+        self.assertEqual(data["k"], body_get["k"])
 
     @decorators.idempotent_id('5eff5619-b7cd-42f1-85e0-47d3d47098dd')
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
@@ -240,7 +240,9 @@ class SharesMetadataTest(base.BaseSharesMixedTest):
 
         body_get = self.shares_v2_client.get_metadata(
             self.share["id"])['metadata']
-        self.assertEqual(data, body_get)
+        body_get_keys = list(body_get.keys())
+        self.assertIn(max_key, body_get_keys)
+        self.assertEqual(data[max_key], body_get[max_key])
 
     @decorators.idempotent_id('44a572f1-6b5c-49d0-8f2e-1583ec3428d8')
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
@@ -251,7 +253,7 @@ class SharesMetadataTest(base.BaseSharesMixedTest):
 
         body_get = self.shares_v2_client.get_metadata(
             self.share["id"])['metadata']
-        self.assertEqual(data, body_get)
+        self.assertEqual(data["key"], body_get["key"])
 
     @decorators.idempotent_id('694d95e1-ba8c-49fc-a888-6f9f0d51d77d')
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
@@ -263,4 +265,36 @@ class SharesMetadataTest(base.BaseSharesMixedTest):
 
         body_get = self.shares_v2_client.get_metadata(
             self.share["id"])['metadata']
-        self.assertEqual(data, body_get)
+        self.assertEqual(max_value, body_get["key"])
+
+
+class SharesMetadataCEPHFSTest(base.BaseSharesMixedTest):
+
+    protocol = "cephfs"
+
+    @classmethod
+    def resource_setup(cls):
+        super(SharesMetadataCEPHFSTest, cls).resource_setup()
+        # create share type
+        cls.share_type = cls.create_share_type()
+        cls.share_type_id = cls.share_type['id']
+        # create share
+        cls.share = cls.create_share(share_type_id=cls.share_type_id)
+
+    @classmethod
+    def skip_checks(cls):
+        super(SharesMetadataCEPHFSTest, cls).skip_checks()
+        if not (cls.protocol in CONF.share.enable_protocols):
+            msg = (
+                "CEPHFS filesystem metadata tests are disabled "
+                "for the %s protocol." % cls.protocol)
+            raise cls.skipException(msg)
+
+    @decorators.idempotent_id('58edc9c8-8b85-49aa-80aa-209fc8f40a13')
+    @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
+    def test_cephfs_share_contains_mount_option(self):
+        body_get = self.shares_v2_client.get_metadata(
+            self.share["id"])['metadata']
+
+        self.assertIn("__mount_options", body_get)
+        self.assertIn("fs", body_get["__mount_options"])

@@ -113,22 +113,26 @@ class ShareTypesAdminTest(base.BaseSharesAdminTest):
     @utils.skip_if_microversion_not_supported("2.50")
     @decorators.idempotent_id('a9af19e1-e789-4c4f-a39b-dd8df6ed00b1')
     @tc.attr(base.TAG_POSITIVE, base.TAG_API)
-    @ddt.data(
-        ('2.50', data_utils.rand_name("type_updated"),
+    @ddt.named_data(
+        ('2_50_name_description_public', '2.50',
+         data_utils.rand_name("type_updated"), 'description_updated', True),
+        ('2_50_name', '2.50', data_utils.rand_name("type_updated"), None,
+         None),
+        ('2_50_description_public', '2.50', None, 'description_updated',
+         None),
+        ('2_50_public', '2.50', None, None, True),
+        ('2_50', '2.50', None, None, False),
+        (f'{LATEST_MICROVERSION}_name_description_public',
+         LATEST_MICROVERSION, data_utils.rand_name("type_updated"),
          'description_updated', True),
-        ('2.50', data_utils.rand_name("type_updated"), None, None),
-        ('2.50', None, 'description_updated', None),
-        ('2.50', None, None, True),
-        ('2.50', None, None, False),
-        (LATEST_MICROVERSION, data_utils.rand_name("type_updated"),
-         'description_updated', True),
-        (LATEST_MICROVERSION, data_utils.rand_name("type_updated"),
-         None, None),
-        (LATEST_MICROVERSION, None, 'description_updated', None),
-        (LATEST_MICROVERSION, None, None, True),
-        (LATEST_MICROVERSION, None, None, False),
+        (f'{LATEST_MICROVERSION}_name', LATEST_MICROVERSION,
+         data_utils.rand_name("type_updated"), None, None),
+        (f'{LATEST_MICROVERSION}_description', LATEST_MICROVERSION, None,
+         'description_updated', None),
+        (f'{LATEST_MICROVERSION}_public', LATEST_MICROVERSION, None, None,
+         True),
+        (LATEST_MICROVERSION, LATEST_MICROVERSION, None, None, False),
     )
-    @ddt.unpack
     def test_share_type_create_update(self, version, st_name,
                                       st_description, st_is_public):
         name = data_utils.rand_name("tempest-manila")
@@ -243,7 +247,7 @@ class ShareTypesAdminTest(base.BaseSharesAdminTest):
             name=share_name, share_type_id=st_create["id"])
         self.assertEqual(share["name"], share_name)
         waiters.wait_for_resource_status(
-            self.shares_client, share["id"], "available")
+            self.shares_v2_client, share["id"], "available")
 
         # Verify share info
         get = self.shares_v2_client.get_share(
@@ -262,7 +266,7 @@ class ShareTypesAdminTest(base.BaseSharesAdminTest):
     def test_private_share_type_access(self):
         name = data_utils.rand_name("tempest-manila")
         extra_specs = self.add_extra_specs_to_dict({"key": "value", })
-        project_id = self.shares_client.tenant_id
+        project_id = self.shares_v2_client.tenant_id
 
         # Create private share type
         st_create = self.create_share_type(
@@ -285,7 +289,7 @@ class ShareTypesAdminTest(base.BaseSharesAdminTest):
             st_id, project_id)
 
         # Now it should be listed
-        st_list = self.shares_client.list_share_types()
+        st_list = self.shares_v2_client.list_share_types()
         sts = st_list["share_types"]
         self.assertTrue(any(st_id in st["id"] for st in sts))
 
@@ -300,7 +304,7 @@ class ShareTypesAdminTest(base.BaseSharesAdminTest):
             st_id, project_id)
 
         # It should not be listed without access
-        st_list = self.shares_client.list_share_types()
+        st_list = self.shares_v2_client.list_share_types()
         sts = st_list["share_types"]
         self.assertFalse(any(st_id in st["id"] for st in sts))
 

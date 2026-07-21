@@ -40,7 +40,7 @@ ShareGroup = [
                     "This value is only used to validate the versions "
                     "response from Manila."),
     cfg.StrOpt("max_api_microversion",
-               default="2.74",
+               default="2.96",
                help="The maximum api microversion is configured to be the "
                     "value of the latest microversion supported by Manila."),
     cfg.StrOpt("region",
@@ -50,7 +50,7 @@ ShareGroup = [
                     "is found in the service catalog, the first found one is "
                     "used."),
     cfg.StrOpt("catalog_type",
-               default="share",
+               default="shared-file-system",
                help="Catalog type of the Share service."),
     cfg.StrOpt('endpoint_type',
                default='publicURL',
@@ -108,6 +108,16 @@ ShareGroup = [
     cfg.ListOpt("enable_ro_access_level_for_protocols",
                 default=["nfs", ],
                 help="List of protocols to run tests with ro access level."),
+    cfg.ListOpt("nfs_versions",
+                default=["4", ],
+                help="Specifies the NFS protocol version to use when mounting "
+                     "an NFS share. Set to '3' for NFSv3, and '4' or '4.1' "
+                     "for NFSv4. Leave it blank to use the default version."),
+    cfg.StrOpt("share_replica_backend_metadata",
+               default="[]",
+               help="JSON list of metadata dicts to pass when creating "
+                    "share replicas (microversion 2.95)"),
+
 
     # Capabilities
     cfg.StrOpt("capability_storage_protocol",
@@ -214,6 +224,11 @@ ShareGroup = [
                       "ss_type:<ldap, kerberos or active_directory>, "
                       "ss_dns_ip:value, ss_user:value, ss_password=value, "
                       "ss_domain:value, ss_server:value"),
+    cfg.ListOpt("capability_encryption_support",
+                default=[],
+                help="Encryption support capability. Possible values are "
+                     "share_server, share etc. "),
+
 
     # Switching ON/OFF test suites filtered by features
     cfg.BoolOpt("run_quota_tests",
@@ -265,6 +280,9 @@ ShareGroup = [
                 default=False,
                 help="Enable or disable migration with "
                      "preserve_snapshots tests set to True."),
+    cfg.BoolOpt("run_driver_assisted_backup_tests",
+                default=False,
+                help="Enable or disable share backup tests."),
     cfg.BoolOpt("run_manage_unmanage_tests",
                 default=False,
                 help="Defines whether to run manage/unmanage tests or not. "
@@ -278,6 +296,14 @@ ShareGroup = [
     cfg.BoolOpt("run_mount_snapshot_tests",
                 default=False,
                 help="Enable or disable mountable snapshot tests."),
+    cfg.BoolOpt("run_negative_migration_replica_tests",
+                default=False,
+                help="Enable or disable negative migration with replica "
+                     "tests."),
+    cfg.BoolOpt("run_positive_migration_replica_tests",
+                default=True,
+                help="Enable or disable positive migration with replica tests."
+                ),
     cfg.BoolOpt("run_create_share_from_snapshot_in_another_pool_or_az_tests",
                 default=False,
                 help="Defines whether to run tests that create share from "
@@ -305,6 +331,7 @@ ShareGroup = [
                default="manila",
                help="Image username."),
     cfg.StrOpt("image_password",
+               secret=True,
                help="Image password. Should be used for "
                     "'image_with_share_tools' without Nova Metadata support."),
     cfg.StrOpt("client_vm_flavor_ref",
@@ -314,8 +341,12 @@ ShareGroup = [
                default=1500,
                help="Time to wait for share migration before "
                     "timing out (seconds)."),
+    cfg.IntOpt("share_backup_timeout",
+               default=1500,
+               help="Time to wait for share backup before "
+                    "timing out (seconds)."),
     cfg.IntOpt("share_server_migration_timeout",
-               default="1500",
+               default=1500,
                help="Time to wait for share server migration before "
                     "timing out (seconds)."),
     cfg.StrOpt("default_share_type_name",
@@ -327,6 +358,18 @@ ShareGroup = [
     cfg.IntOpt("share_size",
                default=1,
                help="Default size in GB for shares created by share tests."),
+    cfg.IntOpt("additional_overflow_blocks",
+               default=0,
+               help="Additional blocks to be written "
+                    "to share in scenario tests."),
+    cfg.IntOpt("share_resize_sync_delay",
+               default=0,
+               help="Time to wait before the changes to the share size"
+                    " are propagated to the storage system."),
+    cfg.IntOpt("share_growth_size",
+               default=1,
+               help="The default increase in size sought by tests"
+                    " when validating share resizing within scenario tests."),
     cfg.BoolOpt("run_ipv6_tests",
                 default=False,
                 help="Enable or disable running IPv6 NFS scenario tests. "
@@ -336,4 +379,28 @@ ShareGroup = [
                      "attempt to create an IPv6 subnet on the project network "
                      "they create for ping and SSH to the client test VM "
                      "where data path testing is performed."),
+    cfg.StrOpt("dd_input_file",
+               default="/dev/zero",
+               help="The input file (if) in the dd command specifies the "
+                    "source of data that dd will read and process, which can "
+                    "be a device, a regular file, or even standard input "
+                    "(stdin). dd copies, transforms, or performs actions on "
+                    "this data based on provided options and then writes it "
+                    "to an output file or device (of). When using /dev/zero "
+                    "in storage systems with default compression, although "
+                    "it generates highly compressible null bytes (zeros), "
+                    "writing data from /dev/zero might not yield significant "
+                    "space savings as these systems are already optimized for "
+                    "efficient compression."),
+    cfg.DictOpt("driver_assisted_backup_test_driver_options",
+                default={'dummy': True},
+                help="Share backup driver options specified as dict."),
+    cfg.BoolOpt("run_encryption_tests",
+                default=False,
+                help="Enable or disable share encryption tests."),
+    cfg.BoolOpt("manage_with_share_or_snapshot_id",
+                default=False,
+                help="When True, manage tests will use the share instance ID "
+                     "or snapshot ID as the export path/provider location "
+                     "instead of the actual values."),
 ]

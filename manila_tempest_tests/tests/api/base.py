@@ -149,8 +149,7 @@ class BaseSharesTest(test.BaseTestCase):
     def setup_clients(cls):
         super(BaseSharesTest, cls).setup_clients()
         os = getattr(cls, 'os_%s' % cls.credentials[0])
-        # Initialise share clients for test credentials
-        cls.shares_client = os.share_v1.SharesClient()
+        # Initialise share client for test credentials
         cls.shares_v2_client = os.share_v2.SharesV2Client()
         # Initialise network clients for test credentials
         cls.networks_client = None
@@ -169,8 +168,7 @@ class BaseSharesTest(test.BaseTestCase):
                     "CONF.share.create_networks_when_multitenancy_enabled "
                     "is set to True")
             share_network_id = cls.provide_share_network(
-                cls.shares_client, cls.networks_client)
-            cls.shares_client.share_network_id = share_network_id
+                cls.shares_v2_client, cls.networks_client)
             cls.shares_v2_client.share_network_id = share_network_id
 
     def setUp(self):
@@ -185,7 +183,8 @@ class BaseSharesTest(test.BaseTestCase):
 
     @classmethod
     def provide_and_associate_security_services(
-            cls, shares_client, share_network_id, cleanup_in_class=True):
+        cls, shares_client, share_network_id, cleanup_in_class=True
+    ):
         """Creates a security service and associates to a share network.
 
         This method creates security services based on the Multiopt
@@ -679,13 +678,13 @@ class BaseSharesTest(test.BaseTestCase):
                              scheduler_hints=None,
                              share_network_id=None,
                              client=None, cleanup_in_class=False,
-                             cleanup=True,
+                             cleanup=True, metadata=None,
                              version=CONF.share.max_api_microversion):
         client = client or cls.shares_v2_client
         replica = client.create_share_replica(
             share_id, availability_zone=availability_zone,
             scheduler_hints=scheduler_hints,
-            share_network_id=share_network_id,
+            share_network_id=share_network_id, metadata=metadata,
             version=version)['share_replica']
         resource = {
             "type": "share_replica",
@@ -703,6 +702,31 @@ class BaseSharesTest(test.BaseTestCase):
             client, replica["id"], constants.STATUS_AVAILABLE,
             resource_name='share_replica')
         return replica
+
+    @classmethod
+    def create_backup_wait_for_active(cls, share_id, client=None,
+                                      cleanup_in_class=False, cleanup=True,
+                                      version=CONF.share.max_api_microversion):
+        client = client or cls.shares_v2_client
+        backup_name = data_utils.rand_name('Backup')
+        backup_options = CONF.share.driver_assisted_backup_test_driver_options
+        backup = client.create_share_backup(
+            share_id,
+            name=backup_name,
+            backup_options=backup_options)['share_backup']
+        resource = {
+            "type": "share_backup",
+            "id": backup["id"],
+            "client": client,
+        }
+        if cleanup:
+            if cleanup_in_class:
+                cls.class_resources.insert(0, resource)
+            else:
+                cls.method_resources.insert(0, resource)
+        waiters.wait_for_resource_status(client, backup["id"], "available",
+                                         resource_name='share_backup')
+        return client.get_share_backup(backup['id'])['share_backup']
 
     @classmethod
     def delete_share_replica(cls, replica_id, client=None,
@@ -731,7 +755,7 @@ class BaseSharesTest(test.BaseTestCase):
                              add_security_services=True, **kwargs):
 
         if client is None:
-            client = cls.shares_client
+            client = cls.shares_v2_client
         share_network = client.create_share_network(**kwargs)['share_network']
         resource = {
             "type": "share_network",
@@ -754,13 +778,14 @@ class BaseSharesTest(test.BaseTestCase):
     def create_share_network_subnet(cls,
                                     client=None,
                                     cleanup_in_class=False,
+                                    metadata=None,
                                     **kwargs):
         if client is None:
             client = cls.shares_v2_client
         share_network_subnet = client.create_subnet(
-            **kwargs)['share_network_subnet']
+            metadata=metadata, **kwargs)['share_network_subnet']
         resource = {
-            "type": "share-network-subnet",
+            "type": "share_network_subnet",
             "id": share_network_subnet["id"],
             "extra_params": {
                 "share_network_id": share_network_subnet["share_network_id"]
@@ -777,7 +802,7 @@ class BaseSharesTest(test.BaseTestCase):
     def create_security_service(cls, ss_type="ldap", client=None,
                                 cleanup_in_class=False, **kwargs):
         if client is None:
-            client = cls.shares_client
+            client = cls.shares_v2_client
         security_service = client.create_security_service(
             ss_type, **kwargs)['security_service']
         resource = {
@@ -790,6 +815,30 @@ class BaseSharesTest(test.BaseTestCase):
         else:
             cls.method_resources.insert(0, resource)
         return security_service
+
+    @classmethod
+    def create_resource_lock(cls, resource_id, resource_type='share',
+                             resource_action='delete', lock_reason=None,
+                             client=None, version=LATEST_MICROVERSION,
+                             cleanup_in_class=True):
+        lock_reason = lock_reason or "locked by tempest tests"
+        client = client or cls.shares_v2_client
+
+        lock = client.create_resource_lock(resource_id,
+                                           resource_type,
+                                           resource_action=resource_action,
+                                           lock_reason=lock_reason,
+                                           version=version)['resource_lock']
+        resource = {
+            "type": "resource_lock",
+            "id": lock["id"],
+            "client": client,
+        }
+        if cleanup_in_class:
+            cls.class_resources.insert(0, resource)
+        else:
+            cls.method_resources.insert(0, resource)
+        return lock
 
     @classmethod
     def update_share_type(cls, share_type_id, name=None,
@@ -848,65 +897,100 @@ class BaseSharesTest(test.BaseTestCase):
             if "deleted" not in res.keys():
                 res["deleted"] = False
             if "client" not in res.keys():
-                res["client"] = cls.shares_client
-            if not(res["deleted"]):
-                res_id = res['id']
-                client = res["client"]
-                with handle_cleanup_exceptions():
-                    if res["type"] == "share":
-                        cls.clear_share_replicas(res_id)
-                        share_group_id = res.get('share_group_id')
-                        if share_group_id:
-                            params = {'share_group_id': share_group_id}
-                            client.delete_share(res_id, params=params)
+                res["client"] = cls.shares_v2_client
+            if not (res["deleted"]):
+                try:
+                    res_id = res['id']
+                    client = res["client"]
+                    with handle_cleanup_exceptions():
+                        if res["type"] == "share":
+                            cls.clear_share_replicas(res_id)
+                            share_group_id = res.get('share_group_id')
+                            if share_group_id:
+                                params = {'share_group_id': share_group_id}
+                                client.delete_share(res_id, params=params)
+                            else:
+                                client.delete_share(res_id)
+                            client.wait_for_resource_deletion(share_id=res_id)
+                        elif res["type"] == "snapshot":
+                            client.delete_snapshot(res_id)
+                            client.wait_for_resource_deletion(
+                                snapshot_id=res_id)
+                        elif (res["type"] == "share_network" and
+                                res_id != CONF.share.share_network_id):
+                            client.delete_share_network(res_id)
+                            client.wait_for_resource_deletion(sn_id=res_id)
+                        elif res["type"] == "dissociate_security_service":
+                            sn_id = res["extra_params"]["share_network_id"]
+                            client.remove_sec_service_from_share_network(
+                                sn_id=sn_id, ss_id=res_id
+                            )
+                        elif res["type"] == "security_service":
+                            client.delete_security_service(res_id)
+                            client.wait_for_resource_deletion(ss_id=res_id)
+                        elif res["type"] == "share_type":
+                            # Check if there are still shares using this
+                            # share type before attempting deletion to avoid
+                            # cascading cleanup issues
+                            shares_using_type = []
+                            try:
+                                shares_using_type = client.list_shares(
+                                    params={'share_type_id': res_id}
+                                )['shares']
+                            except Exception:
+                                pass
+                            if shares_using_type:
+                                # Skip deletion if any shares exist
+                                LOG.warning("Skipping share type deletion "
+                                            "for %s , still has %d shares "
+                                            "using it.",
+                                            res_id,
+                                            len(shares_using_type))
+                                res["deleted"] = True
+                                continue
+                            client.delete_share_type(res_id)
+                            client.wait_for_resource_deletion(st_id=res_id)
+                        elif res["type"] == "share_group":
+                            client.delete_share_group(res_id)
+                            client.wait_for_resource_deletion(
+                                share_group_id=res_id)
+                        elif res["type"] == "share_group_type":
+                            client.delete_share_group_type(res_id)
+                            client.wait_for_resource_deletion(
+                                share_group_type_id=res_id)
+                        elif res["type"] == "share_group_snapshot":
+                            client.delete_share_group_snapshot(res_id)
+                            client.wait_for_resource_deletion(
+                                share_group_snapshot_id=res_id)
+                        elif res["type"] == "share_replica":
+                            client.delete_share_replica(res_id)
+                            client.wait_for_resource_deletion(
+                                replica_id=res_id)
+                        elif res["type"] == "share_backup":
+                            client.delete_share_backup(res_id)
+                            client.wait_for_resource_deletion(backup_id=res_id)
+                        elif res["type"] == "share_network_subnet":
+                            sn_id = res["extra_params"]["share_network_id"]
+                            client.delete_subnet(sn_id, res_id)
+                            client.wait_for_resource_deletion(
+                                share_network_subnet_id=res_id,
+                                sn_id=sn_id)
+                        elif res["type"] == "quotas":
+                            user_id = res.get('user_id')
+                            client.reset_quotas(res_id, user_id=user_id)
+                        elif res["type"] == "resource_lock":
+                            client.delete_resource_lock(res_id)
                         else:
-                            client.delete_share(res_id)
-                        client.wait_for_resource_deletion(share_id=res_id)
-                    elif res["type"] == "snapshot":
-                        client.delete_snapshot(res_id)
-                        client.wait_for_resource_deletion(snapshot_id=res_id)
-                    elif (res["type"] == "share_network" and
-                            res_id != CONF.share.share_network_id):
-                        client.delete_share_network(res_id)
-                        client.wait_for_resource_deletion(sn_id=res_id)
-                    elif res["type"] == "dissociate_security_service":
-                        sn_id = res["extra_params"]["share_network_id"]
-                        client.remove_sec_service_from_share_network(
-                            sn_id=sn_id, ss_id=res_id
-                        )
-                    elif res["type"] == "security_service":
-                        client.delete_security_service(res_id)
-                        client.wait_for_resource_deletion(ss_id=res_id)
-                    elif res["type"] == "share_type":
-                        client.delete_share_type(res_id)
-                        client.wait_for_resource_deletion(st_id=res_id)
-                    elif res["type"] == "share_group":
-                        client.delete_share_group(res_id)
-                        client.wait_for_resource_deletion(
-                            share_group_id=res_id)
-                    elif res["type"] == "share_group_type":
-                        client.delete_share_group_type(res_id)
-                        client.wait_for_resource_deletion(
-                            share_group_type_id=res_id)
-                    elif res["type"] == "share_group_snapshot":
-                        client.delete_share_group_snapshot(res_id)
-                        client.wait_for_resource_deletion(
-                            share_group_snapshot_id=res_id)
-                    elif res["type"] == "share_replica":
-                        client.delete_share_replica(res_id)
-                        client.wait_for_resource_deletion(replica_id=res_id)
-                    elif res["type"] == "share_network_subnet":
-                        sn_id = res["extra_params"]["share_network_id"]
-                        client.delete_subnet(sn_id, res_id)
-                        client.wait_for_resource_deletion(
-                            share_network_subnet_id=res_id,
-                            sn_id=sn_id)
-                    elif res["type"] == "quotas":
-                        user_id = res.get('user_id')
-                        client.reset_quotas(res_id, user_id=user_id)
-                    else:
-                        LOG.warning("Provided unsupported resource type for "
-                                    "cleanup '%s'. Skipping.", res["type"])
+                            LOG.warning("Provided unsupported resource type "
+                                        "for cleanup '%s'. Skipping.",
+                                        res["type"])
+                except share_exceptions.ResourceReleaseFailed as e:
+                    # Resource is on error deleting state, so we remove it from
+                    # the list to delete, since it cannot be deleted anymore.
+                    # It raises because the current cleanup class or method
+                    # must fail.
+                    res["deleted"] = True
+                    raise e
                 res["deleted"] = True
 
     # Useful assertions
@@ -991,7 +1075,8 @@ class BaseSharesTest(test.BaseTestCase):
     def allow_access(self, share_id, client=None, access_type=None,
                      access_level='rw', access_to=None, metadata=None,
                      version=LATEST_MICROVERSION, status='active',
-                     raise_rule_in_error_state=True, cleanup=True):
+                     raise_rule_in_error_state=True, lock_visibility=False,
+                     lock_deletion=False, cleanup=True):
 
         client = client or self.shares_v2_client
         a_type, a_to = utils.get_access_rule_data_from_config(
@@ -1004,8 +1089,15 @@ class BaseSharesTest(test.BaseTestCase):
             'access_to': access_to,
             'access_level': access_level
         }
+        delete_kwargs = (
+            {'unrestrict': True} if lock_deletion else {}
+        )
         if client is self.shares_v2_client:
             kwargs.update({'metadata': metadata, 'version': version})
+        if lock_visibility:
+            kwargs.update({'lock_visibility': True})
+        if lock_deletion:
+            kwargs.update({'lock_deletion': True})
 
         rule = client.create_access_rule(share_id, **kwargs)['access']
         waiters.wait_for_resource_status(
@@ -1016,7 +1108,9 @@ class BaseSharesTest(test.BaseTestCase):
             self.addCleanup(
                 client.wait_for_resource_deletion, rule_id=rule['id'],
                 share_id=share_id, version=version)
-            self.addCleanup(client.delete_access_rule, share_id, rule['id'])
+            self.addCleanup(
+                client.delete_access_rule, share_id, rule['id'],
+                **delete_kwargs)
         return rule
 
 
@@ -1028,7 +1122,6 @@ class BaseSharesAdminTest(BaseSharesTest):
     def setup_clients(cls):
         super(BaseSharesAdminTest, cls).setup_clients()
         # Initialise share clients
-        cls.admin_shares_client = cls.os_admin.share_v1.SharesClient()
         cls.admin_shares_v2_client = cls.os_admin.share_v2.SharesV2Client()
 
     @staticmethod
@@ -1083,6 +1176,12 @@ class BaseSharesAdminTest(BaseSharesTest):
             el = self.shares_v2_client.list_share_export_locations(
                 share["id"])['export_locations']
             share["export_locations"] = el
+
+        if CONF.share.manage_with_share_or_snapshot_id:
+            share_instances = (
+                self.shares_v2_client.get_instances_of_share(share['id'])
+            )['share_instances']
+            share['instances'] = share_instances
 
         return share
 
@@ -1181,10 +1280,10 @@ class BaseSharesAdminTest(BaseSharesTest):
 class BaseSharesMixedTest(BaseSharesAdminTest):
     """Base test case class for all Shares API tests with all user roles.
 
-       Tests deriving from this class can use the primary project's clients
-       (self.shares_client, self.shares_v2_client) and the alt project user's
-       clients (self.alt_shares_client, self.alt_shares_v2_client) to perform
-       API calls and validations. Although admin clients are available for use,
+       Tests deriving from this class can use the primary project's client
+       (self.shares_v2_client) and the alt project user's client
+       (self.alt_shares_v2_client) to perform API calls and validations.
+       Although admin clients are available for use,
        their use should be limited to performing bootstrapping (e.g., creating
        a share type, or resetting state of a resource, etc.). No API validation
        must be performed against admin APIs. Use BaseAdminTest as a base class
@@ -1210,7 +1309,6 @@ class BaseSharesMixedTest(BaseSharesAdminTest):
     @classmethod
     def setup_clients(cls):
         super(BaseSharesMixedTest, cls).setup_clients()
-        cls.alt_shares_client = cls.os_alt.share_v1.SharesClient()
         cls.alt_shares_v2_client = cls.os_alt.share_v2.SharesV2Client()
         # Initialise network clients
         cls.os_admin.networks_client = cls.os_admin.network.NetworksClient()
@@ -1219,12 +1317,18 @@ class BaseSharesMixedTest(BaseSharesAdminTest):
         cls.admin_project = cls.os_admin.auth_provider.auth_data[1]['project']
         identity_clients = getattr(
             cls.os_admin, 'identity_%s' % CONF.identity.auth_version)
-        cls.os_admin.identity_client = identity_clients.IdentityClient()
-        cls.os_admin.projects_client = identity_clients.ProjectsClient()
-        cls.os_admin.users_client = identity_clients.UsersClient()
-        cls.os_admin.roles_client = identity_clients.RolesClient()
+        endpoint_type = CONF.share.endpoint_type
+        cls.os_admin.identity_client = identity_clients.IdentityClient(
+            endpoint_type=endpoint_type)
+        cls.os_admin.projects_client = identity_clients.ProjectsClient(
+            endpoint_type=endpoint_type)
+        cls.os_admin.users_client = identity_clients.UsersClient(
+            endpoint_type=endpoint_type)
+        cls.os_admin.roles_client = identity_clients.RolesClient(
+            endpoint_type=endpoint_type)
         cls.os_admin.domains_client = (
-            cls.os_admin.identity_v3.DomainsClient() if
+            cls.os_admin.identity_v3.DomainsClient(
+                endpoint_type=endpoint_type) if
             CONF.identity.auth_version == 'v3' else None)
         cls.admin_project_member_client = cls.create_user_and_get_client(
             project=cls.admin_project, add_member_role=True)
@@ -1232,13 +1336,11 @@ class BaseSharesMixedTest(BaseSharesAdminTest):
         if CONF.share.multitenancy_enabled:
             admin_share_network_id = cls.provide_share_network(
                 cls.admin_shares_v2_client, cls.os_admin.networks_client)
-            cls.admin_shares_client.share_network_id = admin_share_network_id
             cls.admin_shares_v2_client.share_network_id = (
                 admin_share_network_id)
 
             alt_share_network_id = cls.provide_share_network(
                 cls.alt_shares_v2_client, cls.os_alt.networks_client)
-            cls.alt_shares_client.share_network_id = alt_share_network_id
             cls.alt_shares_v2_client.share_network_id = alt_share_network_id
 
     @classmethod
@@ -1277,6 +1379,5 @@ class BaseSharesMixedTest(BaseSharesAdminTest):
         user_creds = cls.os_admin.creds_client.get_credentials(
             user, project, password)
         os = clients.Clients(user_creds)
-        os.shares_v1_client = os.share_v1.SharesClient()
         os.shares_v2_client = os.share_v2.SharesV2Client()
         return os

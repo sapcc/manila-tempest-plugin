@@ -80,11 +80,15 @@ class ManageNFSSnapshotTest(base.BaseSharesAdminTest):
 
         utils.skip_if_manage_not_supported_for_version(version)
 
+        provider_location = snapshot['provider_location']
+        if CONF.share.manage_with_share_or_snapshot_id:
+            provider_location = snapshot['id']
+
         # Manage snapshot
         share_id = snapshot['share_id']
         snapshot = self.shares_v2_client.manage_snapshot(
             share_id,
-            snapshot['provider_location'],
+            provider_location,
             name=name,
             description=description,
             # Some drivers require additional parameters passed as driver
@@ -129,7 +133,7 @@ class ManageNFSSnapshotTest(base.BaseSharesAdminTest):
 
         # Delete snapshot
         self.shares_v2_client.delete_snapshot(get_snapshot['id'])
-        self.shares_client.wait_for_resource_deletion(
+        self.shares_v2_client.wait_for_resource_deletion(
             snapshot_id=get_snapshot['id'])
         self.assertRaises(lib_exc.NotFound,
                           self.shares_v2_client.get_snapshot,
@@ -159,9 +163,9 @@ class ManageNFSSnapshotTest(base.BaseSharesAdminTest):
         snapshot = self.shares_v2_client.get_snapshot(
             snapshot['id'])['snapshot']
         # Unmanage snapshot
-        self.shares_v2_client.unmanage_snapshot(snapshot['id'],
-                                                version=version)
-        self.shares_client.wait_for_resource_deletion(
+        self.shares_v2_client.unmanage_snapshot(
+            snapshot['id'], version=version)
+        self.shares_v2_client.wait_for_resource_deletion(
             snapshot_id=snapshot['id'])
 
         # Manage snapshot
@@ -182,3 +186,7 @@ class ManageHDFSSnapshotTest(ManageNFSSnapshotTest):
 
 class ManageMapRFSSnapshotTest(ManageNFSSnapshotTest):
     protocol = 'maprfs'
+
+
+class ManageCephFSSnapshotTest(ManageNFSSnapshotTest):
+    protocol = 'cephfs'

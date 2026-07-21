@@ -22,12 +22,14 @@ from tempest.lib import exceptions as lib_exc
 import testtools
 from testtools import testcase as tc
 
+from manila_tempest_tests.common import waiters
 from manila_tempest_tests.tests.api import base
 from manila_tempest_tests import utils
 
 
 CONF = config.CONF
 LATEST_MICROVERSION = CONF.share.max_api_microversion
+RESTRICTED_RULES_VERSION = '2.82'
 
 
 def _create_delete_ro_access_rule(self, version):
@@ -36,10 +38,7 @@ def _create_delete_ro_access_rule(self, version):
     :param self: instance of test class
     """
 
-    if utils.is_microversion_le(version, '2.9'):
-        client = self.shares_client
-    else:
-        client = self.shares_v2_client
+    client = self.shares_v2_client
 
     rule = self.allow_access(
         self.share["id"], client=client, access_type=self.access_type,
@@ -61,6 +60,7 @@ def _create_delete_ro_access_rule(self, version):
             self.share['id'])['access_list']
         rule = [r for r in rules if r['id'] == rule['id']][0]
         self.assertEqual("active", rule['state'])
+    return rule
 
 
 @ddt.ddt
@@ -92,7 +92,7 @@ class ShareIpRulesForNFSTest(base.BaseSharesMixedTest):
     @tc.attr(base.TAG_POSITIVE, base.TAG_BACKEND)
     @ddt.data(*itertools.chain(
         itertools.product(
-            utils.deduplicate(['1.0', '2.9', '2.37', LATEST_MICROVERSION]),
+            utils.deduplicate(['2.9', '2.37', LATEST_MICROVERSION]),
             [4]),
         itertools.product(
             utils.deduplicate(['2.38', LATEST_MICROVERSION]), [6])
@@ -106,10 +106,7 @@ class ShareIpRulesForNFSTest(base.BaseSharesMixedTest):
         else:
             access_to = utils.rand_ipv6_ip()
 
-        if utils.is_microversion_le(version, '2.9'):
-            client = self.shares_client
-        else:
-            client = self.shares_v2_client
+        client = self.shares_v2_client
 
         # create rule
         rule = self.allow_access(
@@ -130,7 +127,7 @@ class ShareIpRulesForNFSTest(base.BaseSharesMixedTest):
     @tc.attr(base.TAG_POSITIVE, base.TAG_BACKEND)
     @ddt.data(*itertools.chain(
         itertools.product(
-            utils.deduplicate(['1.0', '2.9', '2.37', LATEST_MICROVERSION]),
+            utils.deduplicate(['2.9', '2.37', LATEST_MICROVERSION]),
             [4]),
         itertools.product(
             utils.deduplicate(['2.38', LATEST_MICROVERSION]), [6])
@@ -141,10 +138,7 @@ class ShareIpRulesForNFSTest(base.BaseSharesMixedTest):
             access_to = utils.rand_ip(network=True)
         else:
             access_to = utils.rand_ipv6_ip(network=True)
-        if utils.is_microversion_le(version, '2.9'):
-            client = self.shares_client
-        else:
-            client = self.shares_v2_client
+        client = self.shares_v2_client
         # create rule
         rule = self.allow_access(
             self.share["id"], client=client, access_type=self.access_type,
@@ -159,10 +153,25 @@ class ShareIpRulesForNFSTest(base.BaseSharesMixedTest):
     @testtools.skipIf(
         "nfs" not in CONF.share.enable_ro_access_level_for_protocols,
         "RO access rule tests are disabled for NFS protocol.")
-    @ddt.data(*utils.deduplicate(['1.0', '2.9', '2.27', '2.28',
+    @ddt.data(*utils.deduplicate(['2.9', '2.27', '2.28',
                                  LATEST_MICROVERSION]))
-    def test_create_delete_ro_access_rule(self, client_name):
-        _create_delete_ro_access_rule(self, client_name)
+    def test_create_delete_ro_access_rule(self, version):
+        _create_delete_ro_access_rule(self, version)
+
+    @utils.skip_if_microversion_not_supported('2.88')
+    @decorators.idempotent_id('01940881-6f95-77f8-b47d-0941c4e6bafb')
+    @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skipIf(
+        "nfs" not in CONF.share.enable_ro_access_level_for_protocols,
+        "RO access rule tests are disabled for NFS protocol.")
+    def test_update_access_rule(self):
+        rule = _create_delete_ro_access_rule(self, LATEST_MICROVERSION)
+        rule = self.shares_v2_client.update_access_rule(
+            access_id=rule['id'], access_level='rw')['access']
+        waiters.wait_for_resource_status(
+            self.shares_v2_client, self.share['id'], status='active',
+            resource_name='access_rule', rule_id=rule['id'])
+        self.assertEqual(rule['access_level'], 'rw')
 
 
 @ddt.ddt
@@ -174,10 +183,22 @@ class ShareIpRulesForCIFSTest(ShareIpRulesForNFSTest):
     @testtools.skipIf(
         "cifs" not in CONF.share.enable_ro_access_level_for_protocols,
         "RO access rule tests are disabled for CIFS protocol.")
-    @ddt.data(*utils.deduplicate(['1.0', '2.9', '2.27', '2.28',
+    @ddt.data(*utils.deduplicate(['2.9', '2.27', '2.28',
                                  LATEST_MICROVERSION]))
     def test_create_delete_ro_access_rule(self, version):
         _create_delete_ro_access_rule(self, version)
+
+    @utils.skip_if_microversion_not_supported('2.88')
+    @decorators.idempotent_id('02940881-6f95-77f8-b47d-0941c4e6bafb')
+    @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
+    @testtools.skipIf(
+        "cifs" not in CONF.share.enable_ro_access_level_for_protocols,
+        "RO access rule tests are disabled for CIFS protocol.")
+    def test_update_access_rule(self):
+        super(
+            ShareIpRulesForCIFSTest,
+            self
+        ).test_update_access_rule()
 
 
 @ddt.ddt
@@ -210,13 +231,10 @@ class ShareUserRulesForNFSTest(base.BaseSharesMixedTest):
 
     @decorators.idempotent_id('1f87565f-c3d9-448d-b89a-387d6c2fdae6')
     @tc.attr(base.TAG_POSITIVE, base.TAG_BACKEND)
-    @ddt.data(*utils.deduplicate(['1.0', '2.9', '2.27', '2.28',
+    @ddt.data(*utils.deduplicate(['2.9', '2.27', '2.28',
                                  LATEST_MICROVERSION]))
     def test_create_delete_user_rule(self, version):
-        if utils.is_microversion_le(version, '2.9'):
-            client = self.shares_client
-        else:
-            client = self.shares_v2_client
+        client = self.shares_v2_client
 
         # create rule
         rule = self.allow_access(
@@ -238,7 +256,7 @@ class ShareUserRulesForNFSTest(base.BaseSharesMixedTest):
     @testtools.skipIf(
         "nfs" not in CONF.share.enable_ro_access_level_for_protocols,
         "RO access rule tests are disabled for NFS protocol.")
-    @ddt.data(*utils.deduplicate(['1.0', '2.9', '2.27', '2.28',
+    @ddt.data(*utils.deduplicate(['2.9', '2.27', '2.28',
                                  LATEST_MICROVERSION]))
     def test_create_delete_ro_access_rule(self, version):
         _create_delete_ro_access_rule(self, version)
@@ -253,7 +271,7 @@ class ShareUserRulesForCIFSTest(ShareUserRulesForNFSTest):
     @testtools.skipIf(
         "cifs" not in CONF.share.enable_ro_access_level_for_protocols,
         "RO access rule tests are disabled for CIFS protocol.")
-    @ddt.data(*utils.deduplicate(['1.0', '2.9', '2.27', '2.28',
+    @ddt.data(*utils.deduplicate(['2.9', '2.27', '2.28',
                                  LATEST_MICROVERSION]))
     def test_create_delete_ro_access_rule(self, version):
         _create_delete_ro_access_rule(self, version)
@@ -290,13 +308,10 @@ class ShareCertRulesForGLUSTERFSTest(base.BaseSharesMixedTest):
 
     @decorators.idempotent_id('775ebc55-4a4d-4012-a030-2eeb7b6d2ce8')
     @tc.attr(base.TAG_POSITIVE, base.TAG_BACKEND)
-    @ddt.data(*utils.deduplicate(['1.0', '2.9', '2.27', '2.28',
+    @ddt.data(*utils.deduplicate(['2.9', '2.27', '2.28',
                                  LATEST_MICROVERSION]))
     def test_create_delete_cert_rule(self, version):
-        if utils.is_microversion_le(version, '2.9'):
-            client = self.shares_client
-        else:
-            client = self.shares_v2_client
+        client = self.shares_v2_client
 
         # create rule
         rule = self.allow_access(
@@ -318,13 +333,10 @@ class ShareCertRulesForGLUSTERFSTest(base.BaseSharesMixedTest):
     @testtools.skipIf(
         "glusterfs" not in CONF.share.enable_ro_access_level_for_protocols,
         "RO access rule tests are disabled for GLUSTERFS protocol.")
-    @ddt.data(*utils.deduplicate(['1.0', '2.9', '2.27', '2.28',
+    @ddt.data(*utils.deduplicate(['2.9', '2.27', '2.28',
                                  LATEST_MICROVERSION]))
     def test_create_delete_cert_ro_access_rule(self, version):
-        if utils.is_microversion_le(version, '2.9'):
-            client = self.shares_client
-        else:
-            client = self.shares_v2_client
+        client = self.shares_v2_client
         rule = self.allow_access(
             self.share["id"], client=client, access_type='cert',
             access_to='client2.com', access_level='ro', version=version)
@@ -444,11 +456,15 @@ class ShareRulesTest(base.BaseSharesMixedTest):
         cls.share_type = cls.create_share_type()
         cls.share_type_id = cls.share_type['id']
         cls.share = cls.create_share(share_type_id=cls.share_type_id)
+        cls.user_project = cls.os_admin.projects_client.show_project(
+            cls.shares_v2_client.project_id)['project']
+        cls.new_user = cls.create_user_and_get_client(
+            project=cls.user_project)
 
     @decorators.idempotent_id('c52e95cc-d6ea-4d02-9b52-cd7c1913dfff')
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
     @ddt.data(*utils.deduplicate(
-        ['1.0', '2.9', '2.27', '2.28', '2.45', LATEST_MICROVERSION]))
+        ['2.9', '2.27', '2.28', '2.45', LATEST_MICROVERSION]))
     def test_list_access_rules(self, version):
         utils.check_skip_if_microversion_not_supported(version)
         if (utils.is_microversion_lt(version, '2.13') and
@@ -460,10 +476,7 @@ class ShareRulesTest(base.BaseSharesMixedTest):
         metadata = None
         if utils.is_microversion_ge(version, '2.45'):
             metadata = {'key1': 'v1', 'key2': 'v2'}
-        if utils.is_microversion_le(version, '2.9'):
-            client = self.shares_client
-        else:
-            client = self.shares_v2_client
+        client = self.shares_v2_client
         # create rule
         rule = self.allow_access(
             self.share["id"], client=client, access_type=self.access_type,
@@ -484,12 +497,8 @@ class ShareRulesTest(base.BaseSharesMixedTest):
             self.assertEqual("queued_to_apply", rule['state'])
 
         # list rules
-        if utils.is_microversion_eq(version, '1.0'):
-            rules = self.shares_client.list_access_rules(
-                self.share["id"])['access_list']
-        else:
-            rules = self.shares_v2_client.list_access_rules(
-                self.share["id"], version=version)['access_list']
+        rules = self.shares_v2_client.list_access_rules(
+            self.share["id"], version=version)['access_list']
 
         # verify keys
         keys = ("id", "access_type", "access_to", "access_level")
@@ -519,9 +528,95 @@ class ShareRulesTest(base.BaseSharesMixedTest):
         msg = "expected id lists %s times in rule list" % (len(gen))
         self.assertEqual(1, len(gen), msg)
 
+    @decorators.idempotent_id('3bca373e-e54f-49e1-8789-99a383cf4df3')
+    @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
+    @utils.skip_if_microversion_not_supported(RESTRICTED_RULES_VERSION)
+    @ddt.data(
+        *itertools.product(utils.deduplicate(
+            ["2.81", CONF.share.max_api_microversion]), (True, False))
+    )
+    @ddt.unpack
+    def test_list_restricted_rules_from_other_user(
+            self, older_version, lock_visibility):
+        # create rule
+        self.allow_access(
+            self.share["id"], client=self.shares_v2_client,
+            access_type=self.access_type, access_to=self.access_to,
+            lock_visibility=lock_visibility, lock_deletion=True)
+
+        rule = (
+            self.shares_v2_client.list_access_rules(
+                self.share["id"])["access_list"][0])
+
+        rules = self.new_user.shares_v2_client.list_access_rules(
+            self.share['id'])['access_list']
+        rules_get_lower_version = (
+            self.new_user.shares_v2_client.list_access_rules(
+                self.share['id'], version=older_version)['access_list'])
+        expected_access_to = '******' if lock_visibility else self.access_to
+        expected_access_key = (
+            '******' if lock_visibility else rule['access_key'])
+
+        # verify values
+        rule_latest_rules_api = [r for r in rules if r['id'] == rule['id']][0]
+        rule_lower_version_rules_api = [r for r in rules_get_lower_version
+                                        if r['id'] == rule['id']][0]
+        self.assertEqual(
+            expected_access_to, rule_latest_rules_api["access_to"])
+        self.assertEqual(
+            expected_access_to,
+            rule_lower_version_rules_api['access_to'])
+        if self.access_type == 'cephx':
+            self.assertEqual(expected_access_key,
+                             rule_latest_rules_api['access_key'])
+            self.assertEqual(
+                expected_access_key,
+                rule_lower_version_rules_api['access_key'])
+
+    @decorators.idempotent_id('4829265a-eb32-400d-91a0-be06ce31a2ef')
+    @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
+    def test_admin_listing_restricted_rules(self):
+        utils.check_skip_if_microversion_not_supported(
+            RESTRICTED_RULES_VERSION)
+
+        # create rule
+        self.allow_access(
+            self.share["id"], client=self.shares_v2_client,
+            access_type=self.access_type, access_to=self.access_to,
+            lock_visibility=True)
+
+        rules = self.admin_shares_v2_client.list_access_rules(
+            self.share["id"])['access_list']
+
+        # ensure admin can see rules even if locked
+        self.assertEqual(self.access_to, rules[0]["access_to"])
+        if self.access_type == 'cephx':
+            self.assertIsNotNone(rules[0]['access_key'])
+            self.assertFalse(rules[0]['access_key'] == '******')
+        else:
+            self.assertIsNone(rules[0]['access_key'])
+
+    @decorators.idempotent_id('00202c6c-b4c7-4fa6-933a-562fbffde405')
+    @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
+    def test_admin_delete_restricted_rules(self):
+        utils.check_skip_if_microversion_not_supported(
+            RESTRICTED_RULES_VERSION)
+
+        # create rule
+        rule = self.allow_access(
+            self.share["id"], client=self.shares_v2_client,
+            access_type=self.access_type, access_to=self.access_to,
+            lock_visibility=True, lock_deletion=True, cleanup=False)
+
+        self.admin_shares_v2_client.delete_access_rule(
+            self.share['id'], rule['id'], unrestrict=True)
+
+        self.shares_v2_client.wait_for_resource_deletion(
+            rule_id=rule['id'], share_id=self.share['id'])
+
     @decorators.idempotent_id('b77bcbda-9754-48f0-9be6-79341ad1af64')
     @tc.attr(base.TAG_POSITIVE, base.TAG_API_WITH_BACKEND)
-    @ddt.data(*utils.deduplicate(['1.0', '2.9', '2.27', '2.28',
+    @ddt.data(*utils.deduplicate(['2.9', '2.27', '2.28',
                                  LATEST_MICROVERSION]))
     def test_access_rules_deleted_if_share_deleted(self, version):
         if (utils.is_microversion_lt(version, '2.13') and
@@ -529,10 +624,7 @@ class ShareRulesTest(base.BaseSharesMixedTest):
             msg = ("API version %s does not support cephx access type, need "
                    "version >= 2.13." % version)
             raise self.skipException(msg)
-        if utils.is_microversion_le(version, '2.9'):
-            client = self.shares_client
-        else:
-            client = self.shares_v2_client
+        client = self.shares_v2_client
 
         # create share
         share = self.create_share(share_type_id=self.share_type_id)
@@ -549,20 +641,12 @@ class ShareRulesTest(base.BaseSharesMixedTest):
             self.assertEqual("queued_to_apply", rule['state'])
 
         # delete share
-        if utils.is_microversion_eq(version, '1.0'):
-            self.shares_client.delete_share(share['id'])
-            self.shares_client.wait_for_resource_deletion(share_id=share['id'])
-        else:
-            self.shares_v2_client.delete_share(share['id'], version=version)
-            self.shares_v2_client.wait_for_resource_deletion(
-                share_id=share['id'], version=version)
+        self.shares_v2_client.delete_share(share['id'], version=version)
+        self.shares_v2_client.wait_for_resource_deletion(
+            share_id=share['id'], version=version)
 
         # verify absence of rules for nonexistent share id
-        if utils.is_microversion_eq(version, '1.0'):
-            self.assertRaises(lib_exc.NotFound,
-                              self.shares_client.list_access_rules,
-                              share['id'])
-        elif utils.is_microversion_lt(version, '2.45'):
+        if utils.is_microversion_lt(version, '2.45'):
             self.assertRaises(lib_exc.NotFound,
                               self.shares_v2_client.list_access_rules,
                               share['id'], version)

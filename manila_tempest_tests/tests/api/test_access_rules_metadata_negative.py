@@ -20,6 +20,7 @@ from tempest.lib import exceptions as lib_exc
 from testtools import testcase as tc
 
 from manila_tempest_tests.common import constants
+from manila_tempest_tests.common import waiters
 from manila_tempest_tests.tests.api import base
 from manila_tempest_tests import utils
 
@@ -66,7 +67,10 @@ class AccessesMetadataNegativeTest(base.BaseSharesMixedTest):
         cls.share = cls.create_share(share_type_id=cls.share_type_id)
         cls.access = cls.shares_v2_client.create_access_rule(
             cls.share["id"], cls.access_type, cls.access_to,
-            'rw', metadata={u"key1": u"value1"})['access']
+            'rw', metadata={"key1": "value1"})['access']
+        waiters.wait_for_resource_status(
+            cls.shares_v2_client, cls.share["id"], "active",
+            resource_name='access_rule', rule_id=cls.access["id"])
 
     @decorators.idempotent_id('d2d41db8-ae00-4641-a5ec-499cee1877f1')
     @tc.attr(base.TAG_NEGATIVE, base.TAG_API_WITH_BACKEND)

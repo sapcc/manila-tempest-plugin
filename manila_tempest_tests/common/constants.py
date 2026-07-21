@@ -65,6 +65,9 @@ TASK_STATE_DATA_COPYING_COMPLETED = 'data_copying_completed'
 TASK_STATE_DATA_COPYING_CANCELLED = 'data_copying_cancelled'
 TASK_STATE_DATA_COPYING_ERROR = 'data_copying_error'
 
+# Share migration graduation
+SHARE_MIGRATION_GRADUATION_VERSION = '2.96'
+
 # Revert to snapshot
 REVERT_TO_SNAPSHOT_MICROVERSION = '2.27'
 REVERT_TO_SNAPSHOT_SUPPORT = 'revert_to_snapshot_support'
@@ -108,3 +111,6 @@ SERVER_STATE_UNMANAGE_ERROR = 'unmanage_error'
 SERVER_STATE_UNMANAGE_STARTING = 'unmanage_starting'
 STATUS_SERVER_MIGRATING = 'server_migrating'
 STATUS_SERVER_MIGRATING_TO = 'server_migrating_to'
+
+# Share transfer
+SHARE_TRANSFER_VERSION = "2.77"
